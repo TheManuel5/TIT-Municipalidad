@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext';
+import { CategoryBadge, getCategoryIcon } from '../components/Badge';
 import { 
   FileUp, 
   Download, 
@@ -11,7 +12,10 @@ import {
   FileSpreadsheet, 
   ArrowRight,
   RefreshCw,
-  HelpCircle
+  HelpCircle,
+  FileCheck2,
+  Layers,
+  XCircle
 } from 'lucide-react';
 import { CATALOGOS } from '../api.mock.js';
 
@@ -26,6 +30,7 @@ export function ImportarScreen({ onActivosImportados }) {
   const [loading, setLoading] = useState(false);
   const [resultadoFinal, setResultadoFinal] = useState(null);
   const [errorGlobal, setErrorGlobal] = useState(null);
+  const [tabFiltro, setTabFiltro] = useState('todas'); // 'todas' | 'validas' | 'errores'
 
   // Descargar plantilla CSV de ejemplo
   const handleDownloadPlantilla = () => {
@@ -109,7 +114,7 @@ export function ImportarScreen({ onActivosImportados }) {
     document.body.removeChild(link);
   };
 
-  // Cargar datos de prueba directamente
+  // Cargar datos de prueba
   const handleLoadSampleData = () => {
     const dataEjemplo = `id_activo;categoria;marca_modelo;descripcion;ubicacion;unidad;custodio;estado_operativo;costo_inicial;costo_anual;criticidad
 SP-HW-1001;Portátil;Dell Latitude 3420;Intel i5 11va Gen 16GB RAM;DIDECO - San Pablo Central;DIDECO;Marcela Huenchumán;Bueno;690000;0;Alta
@@ -153,14 +158,13 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
         filaObj[h] = valores[idx] || '';
       });
 
-      // Validaciones
       const errores = [];
       const idActivo = (filaObj.id_activo || '').trim().toUpperCase();
 
       if (!idActivo) {
         errores.push('Falta el ID del activo (id_activo).');
       } else if (idActivo === 'SP-HW-0001' || idActivo === 'SP-HW-0042') {
-        errores.push(`ID '${idActivo}' ya existe en el inventario actual.`);
+        errores.push(`ID '${idActivo}' ya existe en el inventario institucional.`);
       }
 
       if (!filaObj.categoria) {
@@ -228,6 +232,12 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
     }
   };
 
+  const filasVisibles = filasAnalizadas.filter((f) => {
+    if (tabFiltro === 'validas') return f.esValida;
+    if (tabFiltro === 'errores') return !f.esValida;
+    return true;
+  });
+
   return (
     <div className="page-wrapper" style={{ maxWidth: '1100px' }}>
       {/* Header */}
@@ -258,12 +268,12 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
         </div>
       )}
 
-      {/* Zona de Subida y Configuración */}
+      {/* ZONA DE SUBIDA VISUAL */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">
             <FileSpreadsheet size={18} />
-            <span>Seleccionar o Arrastrar Archivo CSV</span>
+            <span>Paso 1: Seleccionar o Arrastrar Archivo CSV</span>
           </div>
           <button 
             type="button" 
@@ -298,12 +308,12 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
               height: '100%'
             }}
           />
-          <FileUp size={42} style={{ color: 'var(--primary)', marginBottom: 12 }} />
-          <h4 style={{ fontSize: '1.05rem', color: '#1e293b', fontWeight: 600 }}>
-            {fileName ? `Archivo: ${fileName}` : 'Haz clic o arrastra aquí tu archivo CSV'}
+          <FileUp size={42} style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
+          <h4 style={{ fontSize: '1.05rem', color: '#1e293b', fontWeight: 700 }}>
+            {fileName ? `Archivo cargado: ${fileName}` : 'Haz clic o arrastra aquí tu archivo CSV'}
           </h4>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Formato delimitado por punto y coma (;) o comas (,). Codificación UTF-8.
+            Delimitado por punto y coma (;) o comas (,). Codificación UTF-8 estándar.
           </p>
         </div>
 
@@ -315,12 +325,13 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
         )}
       </div>
 
-      {/* Resumen de Validación Previa */}
+      {/* PASO 2: RESULTADOS DE VALIDACIÓN EN TARJETAS */}
       {resumen && (
         <div className="card">
           <div className="card-header">
             <div className="card-title">
-              <span>Resultados del Análisis de Validación Previa</span>
+              <FileCheck2 size={18} />
+              <span>Paso 2: Validación Previa e Integridad de Filas</span>
             </div>
             {isAdmin && resumen.validas > 0 && !resultadoFinal && (
               <button
@@ -330,16 +341,16 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
                 disabled={loading}
               >
                 <ArrowRight size={16} />
-                {loading ? 'Procesando inserción...' : `Importar ${resumen.validas} Activos Válidos`}
+                {loading ? 'Procesando inserción...' : `Confirmar e Importar ${resumen.validas} Activos`}
               </button>
             )}
           </div>
 
-          <div className="stats-grid" style={{ marginBottom: 20 }}>
+          <div className="stats-grid" style={{ marginBottom: 18 }}>
             <div className="stat-card">
               <div>
                 <div className="stat-number">{resumen.total}</div>
-                <div className="stat-label">Filas Procesadas</div>
+                <div className="stat-label">Filas Analizadas</div>
               </div>
             </div>
 
@@ -358,9 +369,9 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
             </div>
           </div>
 
-          {/* Resultado final de importación exitosa */}
+          {/* Confirmación Exitosa */}
           {resultadoFinal && (
-            <div className="alert alert-success" style={{ marginBottom: 20 }}>
+            <div className="alert alert-success" style={{ marginBottom: 18 }}>
               <CheckCircle2 size={24} style={{ flexShrink: 0 }} />
               <div>
                 <strong>¡Importación Concluida con Éxito!</strong>
@@ -371,55 +382,86 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
             </div>
           )}
 
-          {/* Tabla de Previsualización */}
-          <div className="table-container" style={{ border: 'none' }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Fila</th>
-                  <th>ID Activo</th>
-                  <th>Categoría</th>
-                  <th>Marca / Modelo</th>
-                  <th>Unidad</th>
-                  <th>Estado Validación</th>
-                  <th>Detalle / Error</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filasAnalizadas.map((f) => (
-                  <tr 
-                    key={f.numFila}
-                    style={{ backgroundColor: f.esValida ? 'transparent' : '#fff1f2' }}
-                  >
-                    <td style={{ fontWeight: 600 }}>#{f.numFila}</td>
-                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{f.datos.id_activo || '—'}</td>
-                    <td>{f.datos.categoria || '—'}</td>
-                    <td>{f.datos.marca_modelo || '—'}</td>
-                    <td>{f.datos.unidad || '—'}</td>
-                    <td>
-                      {f.esValida ? (
-                        <span className="badge badge-success">
-                          <CheckCircle2 size={12} /> Válida
-                        </span>
-                      ) : (
-                        <span className="badge badge-danger">
-                          <AlertTriangle size={12} /> Con Error
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {f.esValida ? (
-                        <span style={{ fontSize: '0.78rem', color: '#059669' }}>Lista para inserción</span>
-                      ) : (
-                        <span style={{ fontSize: '0.78rem', color: '#b91c1c', fontWeight: 600 }}>
-                          {f.errores.join(' | ')}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Filtros de la previsualización */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <button
+              type="button"
+              className={`btn btn-sm ${tabFiltro === 'todas' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setTabFiltro('todas')}
+            >
+              Todas ({resumen.total})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${tabFiltro === 'validas' ? 'btn-secondary' : 'btn-outline'}`}
+              onClick={() => setTabFiltro('validas')}
+            >
+              Solo Válidas ({resumen.validas})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${tabFiltro === 'errores' ? 'btn-danger' : 'btn-outline'}`}
+              onClick={() => setTabFiltro('errores')}
+            >
+              Con Error ({resumen.conError})
+            </button>
+          </div>
+
+          {/* Tarjetas Visuales de Previsualización (En lugar de tabla gigante) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {filasVisibles.map((f) => (
+              <div 
+                key={f.numFila}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: `1px solid ${f.esValida ? '#e2e8f0' : '#fecaca'}`,
+                  background: f.esValida ? '#ffffff' : '#fef2f2'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>
+                    #{f.numFila}
+                  </span>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem', color: '#1e40af' }}>
+                        {f.datos.id_activo || 'SIN ID'}
+                      </span>
+                      {f.datos.categoria && <CategoryBadge categoria={f.datos.categoria} />}
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        {f.datos.unidad}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>
+                      {f.datos.marca_modelo || 'Sin descripción'}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  {f.esValida ? (
+                    <span className="badge badge-success">
+                      <CheckCircle2 size={12} /> Fila Válida
+                    </span>
+                  ) : (
+                    <div style={{ textAlign: 'right' }}>
+                      <span className="badge badge-danger">
+                        <AlertTriangle size={12} /> Error de Validación
+                      </span>
+                      <div style={{ fontSize: '0.75rem', color: '#b91c1c', fontWeight: 600, marginTop: 4 }}>
+                        {f.errores.join(' • ')}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

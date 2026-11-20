@@ -11,36 +11,38 @@ import {
   AlertCircle,
   XCircle,
   Wrench,
-  Archive
+  Archive,
+  Layers
 } from 'lucide-react';
 
-export function CategoryBadge({ categoria }) {
-  const getIcon = () => {
-    switch (categoria) {
-      case 'PC': return <Monitor size={14} />;
-      case 'Portátil': return <Laptop size={14} />;
-      case 'Servidor': return <Server size={14} />;
-      case 'Red': return <Network size={14} />;
-      case 'Impresora': return <Printer size={14} />;
-      case 'Software': return <Code size={14} />;
-      case 'Nube': return <Cloud size={14} />;
-      default: return null;
-    }
-  };
+export function getCategoryIcon(categoria, size = 16) {
+  switch (categoria) {
+    case 'PC': return <Monitor size={size} />;
+    case 'Portátil': return <Laptop size={size} />;
+    case 'Servidor': return <Server size={size} />;
+    case 'Red': return <Network size={size} />;
+    case 'Impresora': return <Printer size={size} />;
+    case 'Software': return <Code size={size} />;
+    case 'Nube': return <Cloud size={size} />;
+    default: return <Layers size={size} />;
+  }
+}
 
+export function CategoryBadge({ categoria }) {
   const getStyleClass = () => {
     switch (categoria) {
       case 'Servidor': return 'badge-purple';
       case 'Red': return 'badge-info';
       case 'Software': return 'badge-warning';
       case 'Nube': return 'badge-info';
+      case 'Portátil': return 'badge-primary';
       default: return 'badge-secondary';
     }
   };
 
   return (
     <span className={`badge ${getStyleClass()}`}>
-      {getIcon()}
+      {getCategoryIcon(categoria, 13)}
       <span>{categoria}</span>
     </span>
   );

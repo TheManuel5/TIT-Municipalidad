@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext';
-import { CategoryBadge, StatusBadge } from '../components/Badge';
+import { CategoryBadge, StatusBadge, getCategoryIcon } from '../components/Badge';
 import { ModalTraslado } from '../components/ModalTraslado';
 import { ModalBaja } from '../components/ModalBaja';
 import { 
@@ -21,7 +21,11 @@ import {
   FileText,
   AlertTriangle,
   History,
-  CheckCircle2
+  CheckCircle2,
+  Copy,
+  Check,
+  Tag,
+  ShieldAlert
 } from 'lucide-react';
 
 export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
@@ -33,6 +37,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   // Modales
   const [trasladoModalOpen, setTrasladoModalOpen] = useState(false);
@@ -41,6 +46,14 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const copyId = () => {
+    if (activo) {
+      navigator.clipboard.writeText(activo.id_activo);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const cargarFicha = async () => {
@@ -81,7 +94,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
   if (loading) {
     return (
       <div className="page-wrapper" style={{ textAlign: 'center', padding: '80px 0' }}>
-        <Clock size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />
+        <Clock size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)', margin: '0 auto' }} />
         <p style={{ marginTop: 12, color: 'var(--text-muted)' }}>Cargando expediente técnico del activo...</p>
       </div>
     );
@@ -95,7 +108,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
           <div>{error || 'No fue posible cargar el activo.'}</div>
         </div>
         <button className="btn btn-outline" onClick={onBack}>
-          <ArrowLeft size={16} /> Volver al Listado
+          <ArrowLeft size={16} /> Volver al Inventario
         </button>
       </div>
     );
@@ -103,6 +116,21 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
 
   const isReservadoCriticidad = activo.criticidad === '[RESERVADO]';
   const isReservadoRed = activo.configuracion_red && activo.configuracion_red.startsWith('[RESERVADO');
+
+  // Cálculo de progreso de garantía
+  let garantiaProgress = 100;
+  let diasRestantesGarantia = null;
+  if (activo.fecha_adquisicion && activo.fecha_garantia) {
+    const fIni = new Date(activo.fecha_adquisicion);
+    const fFin = new Date(activo.fecha_garantia);
+    const fHoy = new Date();
+    const duracionTotal = fFin - fIni;
+    const tiempoPasado = fHoy - fIni;
+    if (duracionTotal > 0) {
+      garantiaProgress = Math.max(0, Math.min(100, Math.round((tiempoPasado / duracionTotal) * 100)));
+    }
+    diasRestantesGarantia = Math.ceil((fFin - fHoy) / (1000 * 60 * 60 * 24));
+  }
 
   return (
     <div className="page-wrapper">
@@ -171,35 +199,89 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
         </div>
       )}
 
-      {/* Encabezado Principal de la Ficha */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'monospace', color: 'var(--primary)' }}>
-                {activo.id_activo}
-              </span>
-              <CategoryBadge categoria={activo.categoria} />
-              <StatusBadge estado={activo.estado_operativo} />
+      {/* HERO CARD PRINCIPAL DEL ACTIVO */}
+      <div className="card" style={{ padding: '24px 28px', marginBottom: 22, borderLeft: '5px solid #2563eb' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 20 }}>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div style={{
+              width: 56,
+              height: 56,
+              borderRadius: 12,
+              background: '#eff6ff',
+              color: '#2563eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {getCategoryIcon(activo.categoria, 28)}
             </div>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--secondary)' }}>
-              {activo.marca_modelo}
-            </h2>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: 4 }}>
-              {activo.descripcion || 'Sin descripción adicional registrada.'}
-            </p>
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+                <span style={{ fontSize: '1.3rem', fontWeight: 800, fontFamily: 'monospace', color: '#1e40af' }}>
+                  {activo.id_activo}
+                </span>
+
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  style={{ padding: '2px 7px', fontSize: '0.72rem' }}
+                  onClick={copyId}
+                  title="Copiar Código"
+                >
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? 'Copiado' : 'Copiar'}
+                </button>
+
+                <CategoryBadge categoria={activo.categoria} />
+                <StatusBadge estado={activo.estado_operativo} />
+              </div>
+
+              <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--secondary)' }}>
+                {activo.marca_modelo}
+              </h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 4, maxWidth: '700px' }}>
+                {activo.descripcion || 'Sin descripción técnica complementaria registrada.'}
+              </p>
+            </div>
           </div>
 
-          <div style={{ textAlign: 'right', background: '#f8fafc', padding: '12px 18px', borderRadius: 8, border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Última Validación Física/Lógica</div>
-            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginTop: 2 }}>{activo.fecha_revision || 'Pendiente'}</div>
-            <div style={{ fontSize: '0.75rem', color: '#1e40af', marginTop: 2 }}>Por: {activo.responsable_revision || 'TI'}</div>
+          <div style={{ textAlign: 'right', background: '#f8fafc', padding: '14px 20px', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Validación Física/Lógica</div>
+            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b', marginTop: 2 }}>
+              {activo.fecha_revision || 'Pendiente'}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: 600, marginTop: 2 }}>
+              Por: {activo.responsable_revision || 'Encargado TI'}
+            </div>
+          </div>
+        </div>
+
+        {/* Barra de Ciclo de Vida y Garantía */}
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', marginBottom: 4 }}>
+            <span style={{ color: 'var(--text-muted)' }}>
+              📅 Alta: <strong>{activo.fecha_adquisicion}</strong>
+            </span>
+            <span style={{ fontWeight: 600, color: diasRestantesGarantia !== null && diasRestantesGarantia <= 60 ? '#d97706' : '#059669' }}>
+              🛡️ Fin Garantía: {activo.fecha_garantia} ({diasRestantesGarantia !== null ? `${diasRestantesGarantia} días restantes` : ''})
+            </span>
+          </div>
+          <div className="lifecycle-bar">
+            <div 
+              className="lifecycle-fill" 
+              style={{ 
+                width: `${garantiaProgress}%`, 
+                background: diasRestantesGarantia !== null && diasRestantesGarantia <= 30 ? '#dc2626' : (diasRestantesGarantia <= 60 ? '#d97706' : '#059669') 
+              }} 
+            />
           </div>
         </div>
       </div>
 
-      {/* Cuadrícula de Atributos Estandarizados (Tabla 7 del Informe) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, marginBottom: 28 }}>
+      {/* CUADRÍCULA DE ATRIBUTOS ESTANDARIZADOS (TABLA 7 DEL INFORME) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, marginBottom: 24 }}>
         {/* Bloque 1: Ubicación y Custodia */}
         <div className="card" style={{ marginBottom: 0 }}>
           <div className="card-header">
@@ -209,10 +291,10 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
             </div>
             <span className="badge badge-secondary">Interno</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.85rem' }}>
             <div>
               <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Unidad Municipal Dependiente:</span>
-              <strong>{activo.unidad}</strong>
+              <strong style={{ fontSize: '0.95rem' }}>{activo.unidad}</strong>
             </div>
             <div>
               <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Ubicación Física Específica:</span>
@@ -224,7 +306,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
             </div>
             <div>
               <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Proceso Municipal Dependiente:</span>
-              <span>{activo.proceso_asociado || 'General'}</span>
+              <span>{activo.proceso_asociado || 'Operación General'}</span>
             </div>
           </div>
         </div>
@@ -234,11 +316,11 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
           <div className="card-header">
             <div className="card-title">
               <Clock size={18} />
-              <span>Mantenimiento y Garantías</span>
+              <span>Mantenimiento y Software</span>
             </div>
             <span className="badge badge-secondary">Interno / Compras</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.85rem' }}>
             <div>
               <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Última Mantención Registrada:</span>
               <span>{activo.ultimo_mantenimiento || 'Sin registro'} ({activo.tipo_mantenimiento || 'Sin mantención'})</span>
@@ -267,9 +349,9 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
             </div>
             <span className="badge badge-secondary">Público</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.85rem' }}>
             <div>
-              <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Proveedor Oficial:</span>
+              <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Proveedor Oficial Adjudicado:</span>
               <strong>{activo.proveedor}</strong>
             </div>
             <div>
@@ -278,7 +360,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
             </div>
             <div>
               <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>Costo Inicial de Adquisición:</span>
-              <span style={{ fontWeight: 700, color: '#059669' }}>
+              <span style={{ fontWeight: 800, color: '#059669', fontSize: '1.05rem' }}>
                 ${(activo.costo_inicial || 0).toLocaleString('es-CL')} CLP
               </span>
             </div>
@@ -306,7 +388,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               {isReservadoCriticidad ? 'Restringido' : 'Admin TI'}
             </span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.85rem' }}>
             <div>
               <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem' }}>
                 Nivel de Criticidad Institucional:
@@ -347,21 +429,19 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
         </div>
       </div>
 
-      {/* Bitácora de Auditoría e Historial de Eventos (Trazabilidad Ley 21.459) */}
+      {/* BITÁCORA DE AUDITORÍA E HISTORIAL (TIMELINE VISUAL) */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">
             <History size={18} />
-            <span>Bitácora de Trazabilidad e Historial del Activo</span>
+            <span>Bitácora de Trazabilidad e Historial del Ciclo de Vida</span>
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Registro Inmutable de Eventos
-          </span>
+          <span className="badge badge-secondary">Trazabilidad Ley 21.459</span>
         </div>
 
         {historial.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
-            <p>No se registran eventos adicionales en la bitácora de este activo.</p>
+            <p>No se registran movimientos en la bitácora de este activo.</p>
           </div>
         ) : (
           <div style={{ position: 'relative', paddingLeft: 24, borderLeft: '2px solid #e2e8f0', marginLeft: 12 }}>
@@ -378,12 +458,12 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               });
 
               return (
-                <div key={ev.id || index} style={{ marginBottom: 24, position: 'relative' }}>
+                <div key={ev.id || index} style={{ marginBottom: 22, position: 'relative' }}>
                   {/* Punto en timeline */}
                   <div style={{
                     position: 'absolute',
                     left: -31,
-                    top: 2,
+                    top: 3,
                     width: 12,
                     height: 12,
                     borderRadius: '50%',

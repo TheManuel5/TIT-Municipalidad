@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext';
-import { CategoryBadge, StatusBadge } from '../components/Badge';
+import { CategoryBadge, StatusBadge, getCategoryIcon } from '../components/Badge';
 import { ModalTraslado } from '../components/ModalTraslado';
 import { ModalBaja } from '../components/ModalBaja';
 import { 
@@ -18,7 +18,14 @@ import {
   CheckCircle2,
   Lock,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LayoutGrid,
+  Table as TableIcon,
+  MapPin,
+  User,
+  Shield,
+  Calendar,
+  Layers
 } from 'lucide-react';
 import { CATALOGOS } from '../api.mock.js';
 
@@ -27,17 +34,20 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
   const isAdmin = user?.rol === 'admin_ti';
   const isJefatura = user?.rol === 'jefatura';
 
+  // Modo de vista: 'grid' (tarjetas visuales) o 'table' (tabla compacta)
+  const [vistaModo, setVistaModo] = useState('grid');
+
   // Filtros y estados de búsqueda
   const [q, setQ] = useState('');
   const [categoria, setCategoria] = useState('');
   const [estado, setEstado] = useState('');
   const [unidad, setUnidad] = useState(isJefatura ? user.unidad : '');
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(vistaModo === 'grid' ? 12 : 10);
 
   // Datos
   const [activos, setActivos] = useState([]);
-  const [meta, setMeta] = useState({ total: 0, totalPages: 1, page: 1, limit: 10 });
+  const [meta, setMeta] = useState({ total: 0, totalPages: 1, page: 1, limit: 12 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
@@ -72,26 +82,22 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
     }
   };
 
-  // Recargar al cambiar filtros
   useEffect(() => {
     cargarActivos();
   }, [q, categoria, estado, unidad, page, limit, user]);
 
-  // Manejador de traslado
   const handleConfirmTraslado = async (datos) => {
     await api.trasladarActivo(trasladoModal.activo.id_activo, datos);
     showToast(`Traslado de ${trasladoModal.activo.id_activo} registrado exitosamente.`);
     cargarActivos();
   };
 
-  // Manejador de baja
   const handleConfirmBaja = async (datos) => {
     await api.bajaActivo(bajaModal.activo.id_activo, datos);
     showToast(`Activo ${bajaModal.activo.id_activo} dado de baja formalmente.`);
     cargarActivos();
   };
 
-  // Exportar
   const handleExport = async (formato) => {
     try {
       const res = await api.exportarActivos(formato);
@@ -133,40 +139,60 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
         </div>
       )}
 
-      {/* Header con Título y Botones de Acción */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
+      {/* Header con Título, Selector de Vista y Acciones */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, marginBottom: 18 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--secondary)' }}>
             Inventario de Activos Tecnológicos
           </h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Catálogo unificado y registro de ciclo de vida municipal (Tabla 7 del Informe)
+            Catálogo unificado y ciclo de vida de equipamiento municipal (Tabla 7 del Informe)
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Botones de Exportar */}
+          {/* Selector de Vista: Tarjetas vs Tabla */}
+          <div className="view-toggle">
+            <button
+              type="button"
+              className={`view-toggle-btn ${vistaModo === 'grid' ? 'active' : ''}`}
+              onClick={() => {
+                setVistaModo('grid');
+                setLimit(12);
+                setPage(1);
+              }}
+              title="Vista de Cuadrícula / Tarjetas Visuales"
+            >
+              <LayoutGrid size={15} />
+              <span>Tarjetas</span>
+            </button>
+            <button
+              type="button"
+              className={`view-toggle-btn ${vistaModo === 'table' ? 'active' : ''}`}
+              onClick={() => {
+                setVistaModo('table');
+                setLimit(10);
+                setPage(1);
+              }}
+              title="Vista de Tabla Clásica"
+            >
+              <TableIcon size={15} />
+              <span>Tabla</span>
+            </button>
+          </div>
+
+          {/* Exportar */}
           <button 
             type="button" 
             className="btn btn-secondary btn-sm"
             onClick={() => handleExport('csv')}
-            title="Exportar a archivo CSV (conforme a Ley 21.180)"
+            title="Exportar a CSV"
           >
             <Download size={14} />
-            Exportar CSV
+            CSV
           </button>
 
-          <button 
-            type="button" 
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleExport('json')}
-            title="Exportar a JSON estructurado"
-          >
-            <Download size={14} />
-            Exportar JSON
-          </button>
-
-          {/* Botón Alta (Solo Admin TI) */}
+          {/* Alta (Admin TI) */}
           {isAdmin ? (
             <button 
               type="button" 
@@ -174,11 +200,11 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
               onClick={onNewActivo}
             >
               <Plus size={16} />
-              Registrar Nuevo Activo
+              Nuevo Activo
             </button>
           ) : (
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Lock size={12} /> Alta restringida a Admin TI
+              <Lock size={12} /> Alta solo Admin TI
             </span>
           )}
         </div>
@@ -186,24 +212,76 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
 
       {/* Alerta de restricción por rol */}
       {isJefatura && (
-        <div className="alert alert-info">
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
           <Lock size={18} />
           <div>
-            <strong>Perfil de Jefatura de Unidad:</strong> La consulta está filtrada automáticamente a su unidad dependiente (<strong>{user.unidad}</strong>). Los campos de configuración de red y criticidad se encuentran resguardados conforme a la Ley N.º 20.285 y Ley N.º 21.663.
+            <strong>Perfil de Jefatura de Unidad ({user.unidad}):</strong> Su visualización está restringida exclusivamente a los activos de su dependencia conforme al principio de responsabilidad compartida (Sección 8.1 del Informe).
           </div>
         </div>
       )}
 
-      {/* Barra de Filtros y Búsqueda */}
-      <div className="card" style={{ padding: '16px 20px', marginBottom: 20 }}>
+      {/* CHIPS DE FILTRO RÁPIDO (Permite filtrar sin abrir selects) */}
+      <div className="filter-chips">
+        <button
+          type="button"
+          className={`filter-chip ${!categoria && !estado ? 'active' : ''}`}
+          onClick={() => {
+            setCategoria('');
+            setEstado('');
+            setPage(1);
+          }}
+        >
+          <span>Todos los Bienes</span>
+        </button>
+
+        {CATALOGOS.categorias.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            className={`filter-chip ${categoria === cat ? 'active' : ''}`}
+            onClick={() => {
+              setCategoria(categoria === cat ? '' : cat);
+              setPage(1);
+            }}
+          >
+            {getCategoryIcon(cat, 13)}
+            <span>{cat}</span>
+          </button>
+        ))}
+
+        <button
+          type="button"
+          className={`filter-chip ${estado === 'En reparación' ? 'active' : ''}`}
+          onClick={() => {
+            setEstado(estado === 'En reparación' ? '' : 'En reparación');
+            setPage(1);
+          }}
+        >
+          <span>En Taller</span>
+        </button>
+
+        <button
+          type="button"
+          className={`filter-chip ${estado === 'De baja' ? 'active' : ''}`}
+          onClick={() => {
+            setEstado(estado === 'De baja' ? '' : 'De baja');
+            setPage(1);
+          }}
+        >
+          <span>Histórico Bajas</span>
+        </button>
+      </div>
+
+      {/* Barra de Filtros Tradicional */}
+      <div className="card" style={{ padding: '14px 18px', marginBottom: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, alignItems: 'center' }}>
-          {/* Input búsqueda */}
+          {/* Búsqueda en vivo */}
           <div style={{ position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+            <Search size={16} style={{ position: 'absolute', left: 12, top: 11, color: 'var(--text-muted)' }} />
             <input
               type="text"
               className="form-input"
-              style={{ paddingLeft: 36 }}
+              style={{ paddingLeft: 36, paddingRight: 10 }}
               placeholder="Buscar por ID, modelo, custodio..."
               value={q}
               onChange={(e) => {
@@ -213,24 +291,7 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
             />
           </div>
 
-          {/* Categoría */}
-          <div>
-            <select
-              className="form-select"
-              value={categoria}
-              onChange={(e) => {
-                setCategoria(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">Todas las Categorías</option>
-              {CATALOGOS.categorias.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Estado */}
+          {/* Selector Estado */}
           <div>
             <select
               className="form-select"
@@ -240,14 +301,14 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
                 setPage(1);
               }}
             >
-              <option value="">Todos los Estados</option>
+              <option value="">Cualquier Estado</option>
               {CATALOGOS.estados_operativos.map((e) => (
                 <option key={e} value={e}>{e}</option>
               ))}
             </select>
           </div>
 
-          {/* Unidad (Si no es jefatura) */}
+          {/* Selector Unidad */}
           {!isJefatura && (
             <div>
               <select
@@ -266,7 +327,7 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
             </div>
           )}
 
-          {/* Reset button */}
+          {/* Limpiar */}
           {(q || categoria || estado || (unidad && !isJefatura)) && (
             <button
               type="button"
@@ -285,24 +346,143 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
         </div>
       </div>
 
-      {/* Tabla de Activos */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <RefreshCw size={28} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />
-            <p style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: '0.9rem' }}>Cargando inventario...</p>
-          </div>
-        ) : error ? (
-          <div style={{ padding: 24 }}>
-            <div className="alert alert-danger">{error}</div>
-          </div>
-        ) : activos.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-            <AlertCircle size={36} style={{ color: '#94a3b8', marginBottom: 12 }} />
-            <h4>No se encontraron activos con los filtros seleccionados</h4>
-            <p style={{ fontSize: '0.85rem', marginTop: 4 }}>Intente modificando la búsqueda o seleccionando otra categoría.</p>
-          </div>
-        ) : (
+      {/* CONTENIDO PRINCIPAL: CUADRÍCULA DE TARJETAS (GRID) O TABLA */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '70px 0' }}>
+          <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)', margin: '0 auto' }} />
+          <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: '0.9rem' }}>Cargando catálogo...</p>
+        </div>
+      ) : error ? (
+        <div className="alert alert-danger">{error}</div>
+      ) : activos.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+          <AlertCircle size={36} style={{ color: '#94a3b8', margin: '0 auto 12px' }} />
+          <h4>No se encontraron activos con los filtros indicados</h4>
+          <p style={{ fontSize: '0.85rem', marginTop: 4 }}>Pruebe restableciendo la búsqueda o seleccionando otra categoría.</p>
+        </div>
+      ) : vistaModo === 'grid' ? (
+        /* VISTA DE CUADRÍCULA / TARJETAS VISUALES */
+        <div className="assets-grid">
+          {activos.map((a) => {
+            const isBaja = a.estado_operativo === 'De baja';
+            const isReservado = a.criticidad === '[RESERVADO]';
+
+            let iconBg = '#eff6ff';
+            let iconColor = '#2563eb';
+            if (a.categoria === 'Servidor') { iconBg = '#f5f3ff'; iconColor = '#7c3aed'; }
+            if (a.categoria === 'Red') { iconBg = '#f0f9ff'; iconColor = '#0284c7'; }
+            if (a.categoria === 'Impresora') { iconBg = '#ecfdf5'; iconColor = '#059669'; }
+            if (a.categoria === 'Software') { iconBg = '#fffbeb'; iconColor = '#d97706'; }
+
+            return (
+              <div 
+                key={a.id_activo} 
+                className={`asset-card ${isBaja ? 'de-baja' : ''}`}
+              >
+                <div>
+                  <div className="asset-card-top">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div className="asset-icon-box" style={{ background: iconBg, color: iconColor }}>
+                        {getCategoryIcon(a.categoria, 22)}
+                      </div>
+                      <div>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.88rem', color: '#1e40af' }}>
+                          {a.id_activo}
+                        </span>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{a.categoria}</div>
+                      </div>
+                    </div>
+
+                    <StatusBadge estado={a.estado_operativo} />
+                  </div>
+
+                  <div className="asset-card-title">
+                    {a.marca_modelo}
+                  </div>
+
+                  <p className="asset-card-desc">
+                    {a.descripcion || 'Sin descripción técnica adicional registrada.'}
+                  </p>
+
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+                    <div className="asset-card-info-row">
+                      <MapPin size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.78rem', color: '#334155' }}>
+                        <strong>{a.unidad}</strong> • {a.ubicacion}
+                      </span>
+                    </div>
+
+                    <div className="asset-card-info-row">
+                      <User size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.78rem', color: '#475569' }}>
+                        Custodio: <strong>{a.custodio || 'Sin custodio asignado'}</strong>
+                      </span>
+                    </div>
+
+                    <div className="asset-card-info-row" style={{ marginBottom: 0 }}>
+                      <Calendar size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Garantía hasta: <strong>{a.fecha_garantia}</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer de Tarjeta con Acciones */}
+                <div className="asset-card-footer">
+                  <div>
+                    {isReservado ? (
+                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Lock size={11} /> Nivel Reservado
+                      </span>
+                    ) : (
+                      <span className={`badge ${a.criticidad === 'Alta' ? 'badge-danger' : 'badge-secondary'}`} style={{ fontSize: '0.7rem' }}>
+                        {a.criticidad} Criticidad
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => onSelectActivo(a.id_activo)}
+                      title="Ver Ficha Técnica"
+                    >
+                      <Eye size={13} />
+                      <span>Ficha</span>
+                    </button>
+
+                    {isAdmin && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setTrasladoModal({ isOpen: true, activo: a })}
+                          title="Registrar Traslado"
+                        >
+                          <ArrowRightLeft size={13} />
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => onEditActivo(a)}
+                          title="Editar"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* VISTA DE TABLA CLÁSICA */
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="table-container" style={{ border: 'none' }}>
             <table className="table">
               <thead>
@@ -329,43 +509,35 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
                         <div style={{ fontWeight: 600, color: '#0f172a' }}>{a.marca_modelo}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{a.descripcion || 'Sin descripción'}</div>
                       </td>
-                      <td>
-                        <CategoryBadge categoria={a.categoria} />
-                      </td>
+                      <td><CategoryBadge categoria={a.categoria} /></td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{a.unidad}</div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{a.ubicacion}</div>
                       </td>
-                      <td style={{ fontSize: '0.85rem' }}>
-                        {a.custodio || 'Sin custodio asignado'}
-                      </td>
-                      <td>
-                        <StatusBadge estado={a.estado_operativo} />
-                      </td>
+                      <td style={{ fontSize: '0.85rem' }}>{a.custodio || 'Sin custodio'}</td>
+                      <td><StatusBadge estado={a.estado_operativo} /></td>
                       <td>
                         {isReservado ? (
                           <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Lock size={11} /> Reservado
                           </span>
                         ) : (
-                          <span className={`badge ${a.criticidad === 'Alta' ? 'badge-danger' : (a.criticidad === 'Media' ? 'badge-warning' : 'badge-secondary')}`}>
+                          <span className={`badge ${a.criticidad === 'Alta' ? 'badge-danger' : 'badge-secondary'}`}>
                             {a.criticidad}
                           </span>
                         )}
                       </td>
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: 6 }}>
-                          {/* Ver Ficha (Todos) */}
                           <button
                             type="button"
                             className="btn btn-outline btn-sm"
-                            title="Ver Ficha Técnica e Historial"
+                            title="Ver Ficha Técnica"
                             onClick={() => onSelectActivo(a.id_activo)}
                           >
                             <Eye size={14} />
                           </button>
 
-                          {/* Acciones de modificación (Solo Admin TI) */}
                           {isAdmin && (
                             <>
                               <button
@@ -407,60 +579,43 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
               </tbody>
             </table>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Paginación */}
-        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
-            Mostrando {activos.length > 0 ? (meta.page - 1) * meta.limit + 1 : 0} a {Math.min(meta.page * meta.limit, meta.total)} de {meta.total} activos
-          </div>
+      {/* Paginación */}
+      <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
+          Mostrando {activos.length > 0 ? (meta.page - 1) * meta.limit + 1 : 0} a {Math.min(meta.page * meta.limit, meta.total)} de {meta.total} activos
+        </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem' }}>
-              <span>Filas por pág:</span>
-              <select 
-                className="form-select" 
-                style={{ padding: '2px 8px', width: 'auto', fontSize: '0.8rem' }}
-                value={limit}
-                onChange={(e) => {
-                  setLimit(Number(e.target.value));
-                  setPage(1);
-                }}
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-              >
-                <ChevronLeft size={14} />
-                Anterior
-              </button>
-              <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.825rem', padding: '0 8px' }}>
-                Pág. {meta.page} de {meta.totalPages}
-              </span>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                disabled={page >= meta.totalPages}
-                onClick={() => setPage(page + 1)}
-              >
-                Siguiente
-                <ChevronRight size={14} />
-              </button>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
+              <ChevronLeft size={14} />
+              Anterior
+            </button>
+            <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.825rem', padding: '0 8px', fontWeight: 600 }}>
+              Pág. {meta.page} de {meta.totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={page >= meta.totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Siguiente
+              <ChevronRight size={14} />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Modales Reutilizables */}
+      {/* Modales */}
       <ModalTraslado
         isOpen={trasladoModal.isOpen}
         onClose={() => setTrasladoModal({ isOpen: false, activo: null })}
