@@ -4,3 +4,11 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+
+# Base de datos SQLite local
+*.db
+*.db-shm
+*.db-wal
+
+# Variables de entorno
+backend/.env

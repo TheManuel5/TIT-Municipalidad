@@ -34,19 +34,32 @@ async function request(endpoint, options = {}) {
     throw new Error(`Error de conexión con el servidor (${BASE_URL}): Verifique que el backend esté corriendo.`);
   }
 
-  // Manejo de expiración o token inválido (401)
-  if (response.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(AUTH_KEY);
-    window.location.href = '/login?expired=1';
-    throw new Error('Sesión expirada o no autorizada. Redirigiendo al login...');
-  }
-
-  let data;
+  let data = null;
   try {
     data = await response.json();
   } catch (parseErr) {
-    throw new Error(`Respuesta no válida del servidor (Status: ${response.status})`);
+    // Si la respuesta no es JSON o viene vacía
+  }
+
+  // Manejo de expiración o credenciales incorrectas (401)
+  if (response.status === 401) {
+    // Si falló el login, retornar el error sin redirigir ni recargar la página
+    if (endpoint === '/auth/login') {
+      const errorMsg = data?.error?.message || 'Credenciales inválidas. Verifique su usuario y contraseña.';
+      const err = new Error(errorMsg);
+      err.status = 401;
+      throw err;
+    }
+
+    // Para cualquier otro endpoint: limpiar credenciales inválidas y notificar a la app
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(AUTH_KEY);
+    window.dispatchEvent(new CustomEvent('auth:expired'));
+
+    const errorMsg = data?.error?.message || 'Sesión expirada o no autorizada. Inicie sesión nuevamente.';
+    const err = new Error(errorMsg);
+    err.status = 401;
+    throw err;
   }
 
   if (!response.ok) {

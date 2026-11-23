@@ -6,7 +6,13 @@ export function LoginScreen() {
   const { login, loading, testUsers } = useAuth();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('password123');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('expired=1')) {
+      window.history.replaceState({}, '', window.location.pathname.replace(/\/login$/, '') || '/');
+      return 'Su sesión anterior expiró o requiere autenticación.';
+    }
+    return '';
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
