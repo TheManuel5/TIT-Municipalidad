@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { Wrench } from 'lucide-react';
+import { FieldError } from './FieldError';
 
 /**
  * ModalMantenimiento - Registro de mantención preventiva/correctiva (RF-2)
  * Llama a POST /api/activos/:id/mantenimiento y queda en la bitácora como MANTENIMIENTO.
  */
 const hoyLocal = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+
+function fechaValida(valor) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00.000Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+}
 
 export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
   const [tipo, setTipo] = useState('Preventiva');
@@ -16,6 +23,7 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
   const [responsable, setResponsable] = useState('');
   const [costo, setCosto] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -27,14 +35,26 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
       setResponsable('');
       setCosto('');
       setError('');
+      setFieldErrors({});
     }
   }, [activo, isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!descripcion.trim()) {
-      setError('Describa el trabajo realizado.');
+    const errores = {};
+    if (!descripcion.trim()) errores.descripcion = 'Describe el trabajo realizado.';
+    if (fecha && !fechaValida(fecha)) {
+      errores.fecha = 'Selecciona una fecha válida.';
+    } else if (fecha && fecha > hoyLocal()) {
+      errores.fecha = 'La fecha no puede estar en el futuro.';
+    }
+    if (costo !== '' && (!Number.isFinite(Number(costo)) || Number(costo) < 0)) {
+      errores.costo = 'Ingresa un costo igual o mayor que cero.';
+    }
+    setFieldErrors(errores);
+    if (Object.keys(errores).length > 0) {
+      setError('Corrige los campos marcados antes de registrar.');
       return;
     }
     setLoading(true);
@@ -42,7 +62,7 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
       await onConfirm({
         tipo_mantenimiento: tipo,
         descripcion: descripcion.trim(),
-        fecha,
+        ...(fecha ? { fecha } : {}),
         ...(estadoResultante ? { estado_resultante: estadoResultante } : {}),
         ...(responsable.trim() ? { responsable: responsable.trim() } : {}),
         ...(costo !== '' ? { costo: Number(costo) } : {})
@@ -62,7 +82,7 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Registrar Mantención: ${activo.id_activo}`}>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className="modal-body">
           {error && (
             <div className="alert alert-danger" style={{ marginBottom: 16 }}>
@@ -85,8 +105,14 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
                 className="form-input"
                 value={fecha}
                 max={hoyLocal()}
-                onChange={(e) => setFecha(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.fecha)}
+                aria-describedby={fieldErrors.fecha ? 'mantenimiento-fecha-error' : undefined}
+                onChange={(e) => {
+                  setFecha(e.target.value);
+                  setFieldErrors((previous) => ({ ...previous, fecha: '' }));
+                }}
               />
+              <FieldError id="mantenimiento-fecha-error" message={fieldErrors.fecha} />
             </div>
           </div>
 
@@ -96,10 +122,15 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
               className="form-textarea"
               rows={3}
               value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.descripcion)}
+              aria-describedby={fieldErrors.descripcion ? 'mantenimiento-descripcion-error' : undefined}
+              onChange={(e) => {
+                setDescripcion(e.target.value);
+                setFieldErrors((previous) => ({ ...previous, descripcion: '' }));
+              }}
               placeholder="Ej: Limpieza interna, cambio de pasta térmica y actualización de BIOS / Reemplazo de fusor"
-              required
             />
+            <FieldError id="mantenimiento-descripcion-error" message={fieldErrors.descripcion} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -121,9 +152,15 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
                 step="1"
                 className="form-input"
                 value={costo}
-                onChange={(e) => setCosto(e.target.value)}
+                aria-invalid={Boolean(fieldErrors.costo)}
+                aria-describedby={fieldErrors.costo ? 'mantenimiento-costo-error' : undefined}
+                onChange={(e) => {
+                  setCosto(e.target.value);
+                  setFieldErrors((previous) => ({ ...previous, costo: '' }));
+                }}
                 placeholder="Opcional"
               />
+              <FieldError id="mantenimiento-costo-error" message={fieldErrors.costo} />
             </div>
           </div>
 
@@ -143,7 +180,7 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
             Cancelar
           </button>
-          <button type="submit" className="btn btn-primary" disabled={loading || !descripcion.trim()}>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
             <Wrench size={16} />
             {loading ? 'Registrando...' : 'Registrar Mantención'}
           </button>

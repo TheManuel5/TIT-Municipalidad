@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { KeyRound, Users, ScrollText, RefreshCw, UserPlus, ShieldCheck, ShieldOff } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { KeyRound, Users, ScrollText, RefreshCw, UserPlus, ShieldCheck, ShieldOff, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext';
 import { CATALOGOS } from '../catalogos.js';
+import { FieldError } from '../components/FieldError';
 
 /**
  * SeguridadScreen - Seguridad y Accesos
@@ -28,6 +29,16 @@ const mensajeError = (err) => {
   return (err?.message || 'Error inesperado.') + detalle;
 };
 
+function validarPasswordLocal(password) {
+  if (!password) return 'La contraseña es obligatoria.';
+  if (password.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (new TextEncoder().encode(password).length > 72) return 'La contraseña no puede superar 72 bytes.';
+  if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(password) || !/\d/.test(password)) {
+    return 'Incluye al menos una letra y un número.';
+  }
+  return '';
+}
+
 function Aviso({ tipo, texto }) {
   if (!texto) return null;
   return (
@@ -37,27 +48,49 @@ function Aviso({ tipo, texto }) {
   );
 }
 
-function MiCuenta() {
+function MiCuenta({ showToast }) {
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');
   const [confirmacion, setConfirmacion] = useState('');
   const [aviso, setAviso] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const enviar = async (e) => {
     e.preventDefault();
     setAviso(null);
-    if (nueva !== confirmacion) {
-      setAviso({ tipo: 'error', texto: 'La confirmación no coincide con la nueva contraseña.' });
+    const errores = {};
+    if (!actual) errores.password_actual = 'Escribe tu contraseña actual.';
+    const errorPassword = validarPasswordLocal(nueva);
+    if (errorPassword) errores.password_nueva = errorPassword;
+    if (!confirmacion) errores.confirmacion = 'Confirma la nueva contraseña.';
+    else if (nueva !== confirmacion) errores.confirmacion = 'La confirmación no coincide.';
+    setFieldErrors(errores);
+    if (Object.keys(errores).length > 0) {
+      setAviso({ tipo: 'error', texto: 'Corrige los campos marcados antes de continuar.' });
       return;
     }
+
     setLoading(true);
     try {
       await api.cambiarPassword({ password_actual: actual, password_nueva: nueva });
       setActual(''); setNueva(''); setConfirmacion('');
+      setFieldErrors({});
       setAviso({ tipo: 'ok', texto: 'Contraseña actualizada correctamente.' });
+      showToast('Contraseña actualizada correctamente.', 'ok');
     } catch (err) {
       setAviso({ tipo: 'error', texto: mensajeError(err) });
+      showToast(mensajeError(err), 'error');
+      if (err.status === 401) {
+        setFieldErrors({ password_actual: 'La contraseña actual no es correcta.' });
+      } else {
+        const erroresServidor = Object.fromEntries(
+          (Array.isArray(err.details) ? err.details : [])
+            .filter((detalle) => detalle.campo && detalle.mensaje)
+            .map((detalle) => [detalle.campo, detalle.mensaje])
+        );
+        setFieldErrors(erroresServidor);
+      }
     } finally {
       setLoading(false);
     }
@@ -68,20 +101,56 @@ function MiCuenta() {
       <div className="card-header">
         <h3 className="card-title">Cambiar mi contraseña</h3>
       </div>
-      <form onSubmit={enviar} style={{ padding: 20 }}>
+      <form onSubmit={enviar} noValidate style={{ padding: 20 }}>
         <Aviso {...(aviso || {})} />
         <div className="form-group">
           <label className="form-label">Contraseña actual</label>
-          <input type="password" className="form-input" value={actual} onChange={(e) => setActual(e.target.value)} autoComplete="current-password" required />
+          <input
+            type="password"
+            className="form-input"
+            value={actual}
+            onChange={(e) => {
+              setActual(e.target.value);
+              setFieldErrors((previous) => ({ ...previous, password_actual: '' }));
+            }}
+            autoComplete="current-password"
+            aria-invalid={Boolean(fieldErrors.password_actual)}
+            aria-describedby={fieldErrors.password_actual ? 'password-actual-error' : undefined}
+          />
+          <FieldError id="password-actual-error" message={fieldErrors.password_actual} />
         </div>
         <div className="form-group">
           <label className="form-label">Nueva contraseña</label>
-          <input type="password" className="form-input" value={nueva} onChange={(e) => setNueva(e.target.value)} autoComplete="new-password" required />
+          <input
+            type="password"
+            className="form-input"
+            value={nueva}
+            onChange={(e) => {
+              setNueva(e.target.value);
+              setFieldErrors((previous) => ({ ...previous, password_nueva: '' }));
+            }}
+            autoComplete="new-password"
+            aria-invalid={Boolean(fieldErrors.password_nueva)}
+            aria-describedby={fieldErrors.password_nueva ? 'password-nueva-error' : undefined}
+          />
+          <FieldError id="password-nueva-error" message={fieldErrors.password_nueva} />
           <span className="form-helper">Mínimo 8 caracteres, con al menos una letra y un número.</span>
         </div>
         <div className="form-group">
           <label className="form-label">Confirmar nueva contraseña</label>
-          <input type="password" className="form-input" value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} autoComplete="new-password" required />
+          <input
+            type="password"
+            className="form-input"
+            value={confirmacion}
+            onChange={(e) => {
+              setConfirmacion(e.target.value);
+              setFieldErrors((previous) => ({ ...previous, confirmacion: '' }));
+            }}
+            autoComplete="new-password"
+            aria-invalid={Boolean(fieldErrors.confirmacion)}
+            aria-describedby={fieldErrors.confirmacion ? 'password-confirmacion-error' : undefined}
+          />
+          <FieldError id="password-confirmacion-error" message={fieldErrors.confirmacion} />
         </div>
         <button type="submit" className="btn btn-primary" disabled={loading}>
           <KeyRound size={16} /> {loading ? 'Guardando...' : 'Actualizar contraseña'}
@@ -91,10 +160,12 @@ function MiCuenta() {
   );
 }
 
-function GestionUsuarios({ usuarioActual }) {
+function GestionUsuarios({ usuarioActual, showToast }) {
   const [usuarios, setUsuarios] = useState([]);
   const [aviso, setAviso] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [rowFieldErrors, setRowFieldErrors] = useState({});
   const [form, setForm] = useState({ username: '', nombre: '', rol: 'lectura', unidad: CATALOGOS.unidades[0], password: '' });
 
   const cargar = useCallback(async () => {
@@ -116,18 +187,76 @@ function GestionUsuarios({ usuarioActual }) {
     try {
       await fn();
       setAviso({ tipo: 'ok', texto: textoOk });
+      showToast(textoOk, 'ok');
       cargar();
     } catch (err) {
       setAviso({ tipo: 'error', texto: mensajeError(err) });
+      showToast(mensajeError(err), 'error');
     }
   };
 
-  const crear = (e) => {
+  const crear = async (e) => {
     e.preventDefault();
-    ejecutar(async () => {
+    const errores = {};
+    const usernameValido = /^[a-z0-9._-]{3,30}$/.test(form.username);
+    if (!usernameValido) errores.username = 'Usa entre 3 y 30 caracteres: minúsculas, números, punto, guion o guion bajo.';
+    if (!form.nombre.trim()) errores.nombre = 'Escribe el nombre completo.';
+    const errorPassword = validarPasswordLocal(form.password);
+    if (errorPassword) errores.password = errorPassword;
+    setFieldErrors(errores);
+    if (Object.keys(errores).length > 0) {
+      setAviso({ tipo: 'error', texto: 'Corrige los campos marcados antes de crear la cuenta.' });
+      return;
+    }
+
+    setAviso(null);
+    try {
       await api.crearUsuario(form);
       setForm({ username: '', nombre: '', rol: 'lectura', unidad: CATALOGOS.unidades[0], password: '' });
-    }, `Usuario '${form.username}' creado.`);
+      setAviso({ tipo: 'ok', texto: `Usuario '${form.username}' creado correctamente.` });
+      showToast(`Usuario '${form.username}' creado correctamente.`, 'ok');
+      await cargar();
+    } catch (err) {
+      const erroresServidor = Object.fromEntries(
+        (Array.isArray(err.details) ? err.details : [])
+          .filter((detalle) => detalle.campo && detalle.mensaje)
+          .map((detalle) => [detalle.campo, detalle.mensaje])
+      );
+      if (err.status === 409) erroresServidor.username = err.message;
+      setFieldErrors(erroresServidor);
+      const textoError = Object.keys(erroresServidor).length
+        ? 'Revisa los campos marcados por el servidor.'
+        : mensajeError(err);
+      setAviso({ tipo: 'error', texto: textoError });
+      showToast(textoError, 'error');
+    }
+  };
+
+  const actualizarUsuario = async (usuario, campo, valor) => {
+    const key = `${usuario.id}-${campo}`;
+    setAviso(null);
+    setRowFieldErrors((previous) => ({ ...previous, [key]: '' }));
+    try {
+      await api.actualizarUsuario(usuario.id, { [campo]: valor });
+      const textoOk = `${campo === 'rol' ? 'Rol' : 'Unidad'} de '${usuario.username}' actualizado correctamente.`;
+      setAviso({ tipo: 'ok', texto: textoOk });
+      showToast(textoOk, 'ok');
+      await cargar();
+    } catch (err) {
+      const detalle = Array.isArray(err.details)
+        ? err.details.find((item) => item.campo === campo)?.mensaje
+        : null;
+      setRowFieldErrors((previous) => ({ ...previous, [key]: detalle || mensajeError(err) }));
+      const textoError = `No se pudo actualizar ${campo === 'rol' ? 'el rol' : 'la unidad'} de '${usuario.username}'.`;
+      setAviso({ tipo: 'error', texto: textoError });
+      showToast(textoError, 'error');
+    }
+  };
+
+  const actualizarForm = (campo, valor) => {
+    setForm((previous) => ({ ...previous, [campo]: valor }));
+    setFieldErrors((previous) => ({ ...previous, [campo]: '' }));
+    setAviso(null);
   };
 
   const restablecer = (u) => {
@@ -144,30 +273,57 @@ function GestionUsuarios({ usuarioActual }) {
         <div className="card-header">
           <h3 className="card-title">Aprobar nuevo acceso</h3>
         </div>
-        <form onSubmit={crear} style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, alignItems: 'end' }}>
+        <form onSubmit={crear} noValidate style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, alignItems: 'end' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Usuario</label>
-            <input className="form-input" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })} placeholder="ej: jefe_dom" required />
+            <input
+              className="form-input"
+              value={form.username}
+              onChange={(e) => actualizarForm('username', e.target.value.toLowerCase())}
+              placeholder="ej: jefe_dom"
+              maxLength={30}
+              aria-invalid={Boolean(fieldErrors.username)}
+              aria-describedby={fieldErrors.username ? 'usuario-username-error' : undefined}
+              autoComplete="off"
+            />
+            <FieldError id="usuario-username-error" message={fieldErrors.username} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Nombre completo</label>
-            <input className="form-input" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
+            <input
+              className="form-input"
+              value={form.nombre}
+              onChange={(e) => actualizarForm('nombre', e.target.value)}
+              maxLength={200}
+              aria-invalid={Boolean(fieldErrors.nombre)}
+              aria-describedby={fieldErrors.nombre ? 'usuario-nombre-error' : undefined}
+            />
+            <FieldError id="usuario-nombre-error" message={fieldErrors.nombre} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Rol</label>
-            <select className="form-select" value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value })}>
+            <select className="form-select" value={form.rol} onChange={(e) => actualizarForm('rol', e.target.value)}>
               {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Unidad</label>
-            <select className="form-select" value={form.unidad} onChange={(e) => setForm({ ...form, unidad: e.target.value })}>
+            <select className="form-select" value={form.unidad} onChange={(e) => actualizarForm('unidad', e.target.value)}>
               {CATALOGOS.unidades.map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Contraseña inicial</label>
-            <input type="password" className="form-input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" required />
+            <input
+              type="password"
+              className="form-input"
+              value={form.password}
+              onChange={(e) => actualizarForm('password', e.target.value)}
+              autoComplete="new-password"
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? 'usuario-password-error' : undefined}
+            />
+            <FieldError id="usuario-password-error" message={fieldErrors.password} />
           </div>
           <button type="submit" className="btn btn-primary"><UserPlus size={16} /> Crear cuenta</button>
         </form>
@@ -195,15 +351,21 @@ function GestionUsuarios({ usuarioActual }) {
                     <td>{u.nombre}</td>
                     <td>
                       <select className="form-select" value={u.rol} disabled={esYo}
-                        onChange={(e) => ejecutar(() => api.actualizarUsuario(u.id, { rol: e.target.value }), `Rol de '${u.username}' actualizado.`)}>
+                        aria-invalid={Boolean(rowFieldErrors[`${u.id}-rol`])}
+                        aria-describedby={rowFieldErrors[`${u.id}-rol`] ? `usuario-${u.id}-rol-error` : undefined}
+                        onChange={(e) => actualizarUsuario(u, 'rol', e.target.value)}>
                         {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                       </select>
+                      <FieldError id={`usuario-${u.id}-rol-error`} message={rowFieldErrors[`${u.id}-rol`]} />
                     </td>
                     <td>
                       <select className="form-select" value={u.unidad}
-                        onChange={(e) => ejecutar(() => api.actualizarUsuario(u.id, { unidad: e.target.value }), `Unidad de '${u.username}' actualizada.`)}>
+                        aria-invalid={Boolean(rowFieldErrors[`${u.id}-unidad`])}
+                        aria-describedby={rowFieldErrors[`${u.id}-unidad`] ? `usuario-${u.id}-unidad-error` : undefined}
+                        onChange={(e) => actualizarUsuario(u, 'unidad', e.target.value)}>
                         {CATALOGOS.unidades.map((un) => <option key={un} value={un}>{un}</option>)}
                       </select>
+                      <FieldError id={`usuario-${u.id}-unidad-error`} message={rowFieldErrors[`${u.id}-unidad`]} />
                     </td>
                     <td>
                       <span className={`badge ${u.activo ? 'badge-success' : 'badge-danger'}`}>{u.activo ? 'Activo' : 'Revocado'}</span>
@@ -326,6 +488,14 @@ export function SeguridadScreen() {
   const { user } = useAuth();
   const isAdmin = user?.rol === 'admin_ti';
   const puedeAuditar = isAdmin || user?.rol === 'lectura';
+  const [toastMessage, setToastMessage] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  const showToast = useCallback((texto, tipo = 'ok') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastMessage({ texto, tipo });
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000);
+  }, []);
 
   const pestañas = [
     { id: 'cuenta', label: 'Mi cuenta', icon: KeyRound, visible: true },
@@ -337,6 +507,16 @@ export function SeguridadScreen() {
 
   return (
     <div className="page-wrapper">
+      {toastMessage && (
+        <div
+          className={`alert ${toastMessage.tipo === 'ok' ? 'alert-success' : 'alert-danger'} toast-slide-in`}
+          style={{ position: 'fixed', top: 24, right: 24, zIndex: 9999, minWidth: 320, maxWidth: 480, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}
+        >
+          {toastMessage.tipo === 'ok' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          <span>{toastMessage.texto}</span>
+        </div>
+      )}
+
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--secondary)' }}>Seguridad y Accesos</h1>
         <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>
@@ -354,8 +534,8 @@ export function SeguridadScreen() {
         ))}
       </div>
 
-      {pestaña === 'cuenta' && <MiCuenta />}
-      {pestaña === 'usuarios' && isAdmin && <GestionUsuarios usuarioActual={user} />}
+      {pestaña === 'cuenta' && <MiCuenta showToast={showToast} />}
+      {pestaña === 'usuarios' && isAdmin && <GestionUsuarios usuarioActual={user} showToast={showToast} />}
       {pestaña === 'auditoria' && puedeAuditar && <RegistroAuditoria />}
     </div>
   );

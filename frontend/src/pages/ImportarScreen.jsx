@@ -370,7 +370,7 @@ export function ImportarScreen({ onActivosImportados }) {
             Importación y Carga Masiva de Activos
           </h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Herramienta para carga de planillas de verificación física y contratos (Paso 1 y 3)
+            Herramienta para carga de planillas de verificación física y contratos (Paso 1 y 3).
           </p>
         </div>
 

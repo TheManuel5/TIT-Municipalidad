@@ -3,8 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { RoleBadge } from './Badge';
 import { LogOut, Menu } from 'lucide-react';
 
-export function Navbar({ onToggleSidebar }) {
+export function Navbar({ onToggleSidebar, onLogout }) {
   const { user, logout } = useAuth();
+
+  const handleLogout = onLogout || logout;
 
   return (
     <header className="top-header">
@@ -42,7 +44,7 @@ export function Navbar({ onToggleSidebar }) {
             <button 
               type="button" 
               className="btn btn-outline btn-sm" 
-              onClick={logout}
+              onClick={handleLogout}
               title="Cerrar Sesión"
               style={{ color: 'var(--danger)', borderColor: 'var(--danger-border)' }}
             >

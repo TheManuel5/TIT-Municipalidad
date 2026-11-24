@@ -39,6 +39,18 @@ Contiene:
 - Node.js 22 o superior
 - npm o pnpm
 
+### Opción recomendada: iniciar la API con Docker
+Desde la raíz del proyecto:
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+La API queda en `http://localhost:3000`, reinicia automáticamente si Docker vuelve a iniciar y conserva SQLite en `db/`. Para ver los registros: `docker compose logs -f api`. Para detenerla: `docker compose down` (no elimina la base de datos).
+
+Si existe `backend/.env`, Compose lo carga. Define allí un `JWT_SECRET` aleatorio para conservar sesiones entre recreaciones del contenedor; ese archivo está excluido de Git.
+
 ### 2. Iniciar el backend
 Desde `backend/`, instala dependencias, inicializa la base de datos de desarrollo sin borrar registros existentes e inicia la API:
 

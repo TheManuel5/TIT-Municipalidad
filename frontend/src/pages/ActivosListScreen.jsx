@@ -131,7 +131,7 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
       {/* Toast Feedback */}
       {toastMessage && (
         <div 
-          className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : 'alert-success'}`}
+          className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : 'alert-success'} toast-slide-in`}
           style={{ position: 'fixed', top: 20, right: 24, zIndex: 9999, boxShadow: 'var(--shadow-lg)' }}
         >
           {toastMessage.type === 'danger' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}

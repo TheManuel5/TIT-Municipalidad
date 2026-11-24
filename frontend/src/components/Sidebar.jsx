@@ -7,7 +7,6 @@ import {
   FileCode2, 
   ShieldCheck, 
   Building2,
-  Lock,
   ClipboardCheck,
   KeyRound
 } from 'lucide-react';
@@ -25,7 +24,7 @@ export function Sidebar({ currentTab, setTab, isOpen, onClose }) {
     ...(puedeConsultarConciliaciones
       ? [{ id: 'conciliacion', label: 'Conciliación Física', icon: ClipboardCheck }]
       : []),
-    { id: 'importar', label: 'Importar / Exportar', icon: FileUp, badge: !isAdmin ? 'Restringido' : null },
+    ...(isAdmin ? [{ id: 'importar', label: 'Importar / Exportar', icon: FileUp }] : []),
     { id: 'seguridad', label: 'Seguridad y Accesos', icon: KeyRound },
     { id: 'contrato', label: 'Contrato de API (Docs)', icon: FileCode2 }
   ];

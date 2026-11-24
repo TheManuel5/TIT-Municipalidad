@@ -142,6 +142,16 @@ describe('GET /api/activos (Endpoint 2) - listado, filtros y paginación', () =>
     }
   });
 
+  test('los filtros de búsqueda no permiten alterar la consulta SQL', async () => {
+    const q = "' OR 1=1 --";
+    const busqueda = await api.get(`/activos?q=${encodeURIComponent(q)}`, admin);
+    const categoria = await api.get(`/activos?categoria=${encodeURIComponent(q)}`, admin);
+    assert.equal(busqueda.status, 200);
+    assert.equal(busqueda.body.meta.total, 0);
+    assert.equal(categoria.status, 200);
+    assert.equal(categoria.body.meta.total, 0);
+  });
+
   test('parámetros repetidos no provocan error 500', async () => {
     const r = await api.get('/activos?categoria=PC&categoria=Red', admin);
     assert.equal(r.status, 200);

@@ -45,3 +45,11 @@ test('rechaza credenciales incorrectas y datos de login mal formados', async () 
   });
   assert.equal(invalidDto.status, 400);
 });
+
+test('el usuario no puede alterar la consulta de login con SQL', async () => {
+  const injection = await api.request('POST', '/auth/login', {
+    body: { username: "' OR 1=1 --", password: 'password123' }
+  });
+  assert.equal(injection.status, 401);
+  assert.equal(injection.body.success, false);
+});

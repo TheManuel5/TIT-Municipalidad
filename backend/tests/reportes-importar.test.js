@@ -1,5 +1,7 @@
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { usarBaseTemporal, hoyLocal, sumarDias, iniciarServidor } = require('./helpers');
 
 usarBaseTemporal();
@@ -160,6 +162,27 @@ describe('Importación de activos', () => {
     assert.equal(r.status, 400);
     assert.match(r.body.error.message, /verificación física y documental/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activos WHERE id_activo = 'SP-GAB-9012'").get().n, 0);
+  });
+
+  test('el CSV de prueba contiene filas válidas para importar', async () => {
+    const contenido = fs.readFileSync(
+      path.join(__dirname, '../../docs/ejemplo_importacion_activos.csv'),
+      'utf8'
+    ).trim();
+    const [cabecera, ...lineas] = contenido.split(/\r?\n/);
+    const columnas = cabecera.split(';');
+    const filas = lineas.map((linea) => Object.fromEntries(
+      linea.split(';').map((valor, indice) => [columnas[indice], valor.trim()])
+    ));
+
+    const r = await api.request('POST', '/importar', {
+      token: admin,
+      body: { recepcion_verificada: true, filas }
+    });
+
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.data.resumen, { total_procesadas: 2, validas: 2, con_error: 0 });
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activos WHERE id_activo LIKE ?').get('SP-PRUEBA-91%').n, 2);
   });
 
   test('rechaza roles sin permiso y cuerpo vacío con el formato de error del contrato', async () => {

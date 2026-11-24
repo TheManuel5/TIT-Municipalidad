@@ -53,7 +53,275 @@ export function ReportesScreen({ onSelectActivo }) {
   }, [user]);
 
   const handlePrint = () => {
-    window.print();
+    const fechaEmision = new Date().toLocaleDateString('es-CL', {
+      day: '2-digit', month: 'long', year: 'numeric',
+      timeZone: 'America/Santiago'
+    });
+    const horaEmision = new Date().toLocaleTimeString('es-CL', {
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'America/Santiago'
+    });
+    const nroInforme = `INF-TI-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    // Datos para el informe
+    const tot = resumen?.totales || {};
+    const pctOperativos = tot.total_activos ? Math.round((tot.operativos / tot.total_activos) * 100) : 0;
+    const pctValidados = tot.porcentaje_activos_validados || 0;
+
+    const categoriasRows = (resumen?.por_categoria || []).map(c => {
+      const pct = tot.total_activos ? Math.round((c.cantidad / tot.total_activos) * 100) : 0;
+      return `<tr><td>${c.categoria}</td><td style="text-align:center">${c.cantidad}</td><td style="text-align:center">${pct}%</td></tr>`;
+    }).join('');
+
+    const unidadesRows = (resumen?.por_unidad || []).map(u => {
+      const pct = tot.total_activos ? Math.round((u.cantidad / tot.total_activos) * 100) : 0;
+      return `<tr><td>${u.unidad}</td><td style="text-align:center">${u.cantidad}</td><td style="text-align:center">${pct}%</td></tr>`;
+    }).join('');
+
+    const costosData = costos || {};
+    const invInicial = (costosData.inversion_total_inicial || 0).toLocaleString('es-CL');
+    const costoAnual = (costosData.costo_anual_recurrente_total || 0).toLocaleString('es-CL');
+    const tco5 = (costosData.tco_estimado_5_anos || 0).toLocaleString('es-CL');
+
+    const costosRows = (costosData.desglose_por_categoria || []).map(item => {
+      const tcoCat = item.inversion_inicial + item.costo_anual * 5;
+      return `<tr>
+        <td>${item.categoria}</td>
+        <td style="text-align:center">${item.cantidad}</td>
+        <td style="text-align:right">$${item.inversion_inicial.toLocaleString('es-CL')}</td>
+        <td style="text-align:right">$${item.costo_anual.toLocaleString('es-CL')}</td>
+        <td style="text-align:right;font-weight:600">$${tcoCat.toLocaleString('es-CL')}</td>
+      </tr>`;
+    }).join('');
+
+    const garantiasRows = (alertas?.garantias_por_vencer || []).slice(0, 15).map(g =>
+      `<tr>
+        <td style="font-family:monospace;font-weight:700">${g.id_activo}</td>
+        <td>${g.marca_modelo}</td>
+        <td>${g.categoria}</td>
+        <td>${g.unidad}</td>
+        <td style="text-align:center">${g.fecha_garantia}</td>
+        <td style="text-align:center;font-weight:700;color:${g.dias_restantes <= 30 ? '#dc2626' : '#92400e'}">${g.dias_restantes > 0 ? g.dias_restantes + ' días' : 'EXPIRADA'}</td>
+      </tr>`
+    ).join('');
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Informe Oficial - Inventario Tecnológico Municipal - ${nroInforme}</title>
+<style>
+  @page { size: letter; margin: 20mm 18mm 25mm 18mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Times New Roman', 'Georgia', serif; font-size: 11pt; color: #1a1a1a; line-height: 1.5; }
+
+  .header-oficial { text-align: center; border-bottom: 3px double #1e3a5f; padding-bottom: 14px; margin-bottom: 20px; }
+  .escudo { font-size: 36pt; margin-bottom: 4px; }
+  .header-oficial h1 { font-size: 14pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #1e3a5f; margin: 2px 0; }
+  .header-oficial h2 { font-size: 11pt; font-weight: 400; color: #333; margin: 2px 0; }
+  .header-oficial .subtitulo { font-size: 9pt; color: #666; font-style: italic; }
+
+  .info-doc { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; padding: 10px 14px; background: #f5f7fa; border: 1px solid #d0d5dd; border-radius: 4px; font-size: 9.5pt; }
+  .info-doc div { line-height: 1.6; }
+
+  .titulo-seccion { font-size: 12pt; font-weight: 700; color: #1e3a5f; border-bottom: 1.5px solid #1e3a5f; padding-bottom: 4px; margin: 22px 0 10px 0; text-transform: uppercase; letter-spacing: 0.5px; page-break-after: avoid; }
+  .titulo-seccion span { font-size: 9pt; font-weight: 400; color: #666; text-transform: none; letter-spacing: 0; float: right; margin-top: 3px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px 0; font-size: 9.5pt; }
+  th { background: #1e3a5f; color: white; padding: 7px 10px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.3px; }
+  td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; }
+  tr:nth-child(even) td { background: #f8f9fb; }
+  tr:hover td { background: #eef2f7; }
+
+  .resumen-cards { display: flex; gap: 12px; margin: 10px 0 16px 0; }
+  .resumen-card { flex: 1; text-align: center; padding: 12px 10px; border: 1.5px solid #d0d5dd; border-radius: 6px; }
+  .resumen-card .valor { font-size: 20pt; font-weight: 800; color: #1e3a5f; }
+  .resumen-card .label { font-size: 8.5pt; color: #555; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
+
+  .total-row td { font-weight: 700; border-top: 2px solid #1e3a5f; background: #eef2f7 !important; }
+
+  .observaciones { margin: 16px 0; padding: 12px 14px; border-left: 3px solid #1e3a5f; background: #f5f7fa; font-size: 9.5pt; }
+  .observaciones strong { display: block; margin-bottom: 4px; color: #1e3a5f; }
+
+  .firmas { display: flex; justify-content: space-between; margin-top: 50px; padding-top: 10px; }
+  .firma-bloque { text-align: center; width: 40%; }
+  .firma-linea { border-top: 1.5px solid #333; margin-top: 50px; padding-top: 6px; }
+  .firma-nombre { font-weight: 700; font-size: 10pt; }
+  .firma-cargo { font-size: 8.5pt; color: #555; }
+
+  .pie-pagina { margin-top: 30px; padding-top: 10px; border-top: 1px solid #ccc; text-align: center; font-size: 8pt; color: #888; }
+
+  .marca-agua { position: fixed; top: 45%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 60pt; color: rgba(30, 58, 95, 0.04); font-weight: 900; text-transform: uppercase; letter-spacing: 8px; pointer-events: none; z-index: 0; white-space: nowrap; }
+
+  .confidencial { text-align: center; margin: 8px 0; padding: 4px 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; font-size: 8.5pt; font-weight: 600; color: #856404; display: inline-block; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="marca-agua">MUNICIPALIDAD DE SAN PABLO</div>
+
+<!-- MEMBRETE OFICIAL -->
+<div class="header-oficial">
+  <div class="escudo">🏛️</div>
+  <h1>Ilustre Municipalidad de San Pablo</h1>
+  <h2>Departamento de Informática y Tecnología</h2>
+  <p class="subtitulo">Provincia de Osorno · Región de Los Lagos · Chile</p>
+</div>
+
+<!-- TÍTULO DEL DOCUMENTO -->
+<div style="text-align:center; margin-bottom: 16px;">
+  <h2 style="font-size:14pt; color:#1e3a5f; font-weight:800; margin-bottom:4px;">
+    INFORME OFICIAL DE ESTADO DEL INVENTARIO<br>TECNOLÓGICO MUNICIPAL
+  </h2>
+  <p style="font-size:9pt; color:#666;">
+    Plan Informático Municipal 2027–2031 · Proyecto A: Inventario y Ciclo de Vida de Activos TI
+  </p>
+  <div style="margin-top:8px;">
+    <span class="confidencial">📋 DOCUMENTO DE USO INTERNO — COMITÉ DE TECNOLOGÍA</span>
+  </div>
+</div>
+
+<!-- DATOS DEL DOCUMENTO -->
+<div class="info-doc">
+  <div>
+    <strong>N° de Informe:</strong> ${nroInforme}<br>
+    <strong>Fecha de Emisión:</strong> ${fechaEmision}<br>
+    <strong>Hora:</strong> ${horaEmision} hrs.
+  </div>
+  <div style="text-align:right">
+    <strong>Emitido por:</strong> ${user?.nombre || 'Sistema TI'}<br>
+    <strong>Cargo/Rol:</strong> ${user?.rol === 'admin_ti' ? 'Administrador TI' : user?.rol === 'jefatura' ? 'Jefatura de Unidad' : 'Auditoría / Control'}<br>
+    <strong>Unidad:</strong> ${user?.unidad || 'Informática'}
+  </div>
+</div>
+
+<!-- SECCIÓN 1: RESUMEN EJECUTIVO -->
+<div class="titulo-seccion">1. Resumen Ejecutivo del Inventario <span>Tabla 7 del Informe</span></div>
+
+<div class="resumen-cards">
+  <div class="resumen-card">
+    <div class="valor">${tot.total_activos || 0}</div>
+    <div class="label">Total Bienes Registrados</div>
+  </div>
+  <div class="resumen-card">
+    <div class="valor" style="color:#059669">${pctOperativos}%</div>
+    <div class="label">Disponibilidad Operativa</div>
+  </div>
+  <div class="resumen-card">
+    <div class="valor" style="color:#dc2626">${tot.de_baja || 0}</div>
+    <div class="label">Bajas Tramitadas</div>
+  </div>
+  <div class="resumen-card">
+    <div class="valor" style="color:${pctValidados >= 95 ? '#059669' : '#d97706'}">${pctValidados}%</div>
+    <div class="label">Activos Validados (Meta ≥95%)</div>
+  </div>
+</div>
+
+<!-- SECCIÓN 2: DISTRIBUCIÓN POR CATEGORÍA -->
+<div class="titulo-seccion">2. Distribución por Categoría de Activo</div>
+<table>
+  <thead><tr><th>Categoría</th><th style="text-align:center">Cantidad</th><th style="text-align:center">Participación</th></tr></thead>
+  <tbody>
+    ${categoriasRows}
+    <tr class="total-row"><td>TOTAL GENERAL</td><td style="text-align:center">${tot.total_activos || 0}</td><td style="text-align:center">100%</td></tr>
+  </tbody>
+</table>
+
+<!-- SECCIÓN 3: DISTRIBUCIÓN POR UNIDAD MUNICIPAL -->
+<div class="titulo-seccion">3. Asignación por Dirección / Unidad Municipal</div>
+<table>
+  <thead><tr><th>Unidad Municipal</th><th style="text-align:center">Activos Asignados</th><th style="text-align:center">Participación</th></tr></thead>
+  <tbody>
+    ${unidadesRows}
+  </tbody>
+</table>
+
+<!-- SECCIÓN 4: ANÁLISIS FINANCIERO TCO -->
+<div class="titulo-seccion">4. Análisis Financiero — Costo Total de Propiedad (TCO) <span>Ley N° 19.886</span></div>
+
+<div class="resumen-cards">
+  <div class="resumen-card" style="border-color:#059669">
+    <div class="valor" style="color:#059669;font-size:14pt">$${invInicial}</div>
+    <div class="label">Inversión Inicial Capitalizada</div>
+  </div>
+  <div class="resumen-card" style="border-color:#0284c7">
+    <div class="valor" style="color:#0284c7;font-size:14pt">$${costoAnual}</div>
+    <div class="label">Gasto Recurrente Anual</div>
+  </div>
+  <div class="resumen-card" style="border-color:#7c3aed">
+    <div class="valor" style="color:#7c3aed;font-size:14pt">$${tco5}</div>
+    <div class="label">TCO Proyectado 5 Años (2027–2031)</div>
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Categoría</th><th style="text-align:center">Unidades</th><th style="text-align:right">Inversión Inicial</th><th style="text-align:right">Costo Anual</th><th style="text-align:right">TCO 5 Años</th></tr></thead>
+  <tbody>
+    ${costosRows}
+    <tr class="total-row">
+      <td>TOTAL INSTITUCIONAL</td>
+      <td style="text-align:center">${tot.total_activos || 0}</td>
+      <td style="text-align:right">$${invInicial}</td>
+      <td style="text-align:right">$${costoAnual}</td>
+      <td style="text-align:right">$${tco5}</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- SECCIÓN 5: ALERTAS DE GARANTÍA -->
+<div class="titulo-seccion">5. Auditoría de Vigencia de Garantías <span>Próximos 90 días</span></div>
+${(alertas?.garantias_por_vencer || []).length > 0 ? `
+<table>
+  <thead><tr><th>Código</th><th>Bien / Modelo</th><th>Categoría</th><th>Unidad</th><th style="text-align:center">Vencimiento</th><th style="text-align:center">Plazo</th></tr></thead>
+  <tbody>${garantiasRows}</tbody>
+</table>
+` : '<p style="color:#059669;font-weight:600;margin:10px 0">✓ No se detectaron garantías próximas a vencer en los próximos 90 días.</p>'}
+
+<!-- OBSERVACIONES -->
+<div class="observaciones">
+  <strong>Observaciones del Emisor:</strong>
+  El presente informe fue generado de manera automática por el Sistema de Inventario Tecnológico Municipal (Proyecto A) conforme a los datos registrados a la fecha y hora de emisión. Los valores reflejan el estado actual de la base de datos institucional y están sujetos a las actualizaciones que el Departamento de Informática realice en el sistema.
+</div>
+
+<!-- FIRMAS -->
+<div class="firmas">
+  <div class="firma-bloque">
+    <div class="firma-linea">
+      <div class="firma-nombre">${user?.nombre || 'Encargado TI'}</div>
+      <div class="firma-cargo">${user?.rol === 'admin_ti' ? 'Administrador de TI' : user?.rol === 'jefatura' ? 'Jefatura de Unidad' : 'Auditoría / Control'}<br>Departamento de Informática</div>
+    </div>
+  </div>
+  <div class="firma-bloque">
+    <div class="firma-linea">
+      <div class="firma-nombre">Jefe(a) Departamento de Informática</div>
+      <div class="firma-cargo">Visación Técnica<br>Municipalidad de San Pablo</div>
+    </div>
+  </div>
+</div>
+
+<!-- PIE DE PÁGINA -->
+<div class="pie-pagina">
+  Ilustre Municipalidad de San Pablo · Provincia de Osorno · Región de Los Lagos · Chile<br>
+  Documento generado el ${fechaEmision} a las ${horaEmision} hrs. · ${nroInforme} · Sistema de Inventario TI — Plan Informático 2027–2031<br>
+  <em>Este documento es de carácter interno y confidencial. Su reproducción o distribución no autorizada está prohibida.</em>
+</div>
+
+</body>
+</html>`);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 400);
   };
 
   if (loading) {

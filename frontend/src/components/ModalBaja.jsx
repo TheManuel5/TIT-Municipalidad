@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { Archive, AlertTriangle } from 'lucide-react';
+import { FieldError } from './FieldError';
 
 export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
   const [motivo, setMotivo] = useState('');
   const [detalles, setDetalles] = useState('');
   const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -13,6 +15,7 @@ export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
       setMotivo('');
       setDetalles('');
       setError('');
+      setFieldError('');
     }
   }, [activo, isOpen]);
 
@@ -20,11 +23,11 @@ export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
     e.preventDefault();
     setError('');
 
-    // REGLA CRÍTICA DEL CONTRATO: El motivo es estrictamente obligatorio
     if (!motivo || !motivo.trim()) {
-      setError('El motivo de la baja es ESTRICTAMENTE OBLIGATORIO por exigencia de la Ley N.º 18.695 (Administración de Bienes Municipales).');
+      setFieldError('Escribe el motivo de la baja; este dato es obligatorio.');
       return;
     }
+    setFieldError('');
 
     setLoading(true);
     try {
@@ -48,7 +51,7 @@ export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
       onClose={onClose} 
       title={`Decretar Baja de Activo: ${activo.id_activo}`}
     >
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className="modal-body">
           <div className="alert alert-danger" style={{ marginBottom: 18 }}>
             <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -74,11 +77,16 @@ export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
               className="form-textarea"
               rows={3}
               value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
+              onChange={(e) => {
+                setMotivo(e.target.value);
+                setFieldError('');
+              }}
               placeholder="Ej: Falla irreversible en tarjeta madre y costo de reparación supera el 60% del valor residual / Pérdida en terreno / Obsolescencia..."
               maxLength={1000}
-              required
+              aria-invalid={Boolean(fieldError)}
+              aria-describedby={fieldError ? 'baja-motivo-error' : undefined}
             />
+            <FieldError id="baja-motivo-error" message={fieldError} />
             <span className="form-helper">
               Justificación requerida por Contraloría y DAF conforme a la Ley Orgánica de Municipalidades.
             </span>
@@ -109,7 +117,7 @@ export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
           <button 
             type="submit" 
             className="btn btn-danger"
-            disabled={loading || !motivo.trim()}
+            disabled={loading}
           >
             <Archive size={16} />
             {loading ? 'Procesando baja...' : 'Confirmar Baja de Activo'}
