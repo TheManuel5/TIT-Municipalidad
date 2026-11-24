@@ -3,7 +3,8 @@
 **Sistema de Gestión de Inventario Tecnológico (Proyecto A)**
 Ilustre Municipalidad de San Pablo — Plan Informático Municipal 2027–2031
 **Responsable:** Alfredo Flores Ibarra
-**Alcance:** `db/schema.sql`, `db/database.js`, `db/seed.js`, `backend/routes/consultas.js` y `backend/tests/`
+**Alcance:** `db/schema.sql`, `db/database.js`, `db/seed.js`, `db/backup.js`, `backend/routes/consultas.js` y `backend/tests/`
+**Ver también:** [`docs/seguridad.md`](seguridad.md) (contraseñas, usuarios, auditoría y respaldos)
 **Documento de referencia:** [`docs/contrato-api.md`](contrato-api.md) (fuente única de verdad del equipo)
 
 ---
@@ -70,7 +71,11 @@ La API queda en **`http://localhost:3000/api`**. Al iniciar, la consola debe mos
 | `npm run dev` | Igual que `start`, pero se reinicia al guardar cambios. |
 | `npm run seed` | Crea las tablas si no existen e inserta los activos que falten. **No borra ni modifica nada existente.** |
 | `npm run seed:reset` | Elimina `db/inventario.db` y la recrea desde cero con los datos iniciales. |
-| `npm test` | Ejecuta las 66 pruebas automáticas (ver [§8](#8-pruebas-automáticas)). |
+| `npm test` | Ejecuta las 136 pruebas automáticas (ver [§8](#8-pruebas-automáticas)). |
+| `npm run backup` | Crea un respaldo verificado de la base (ver [`seguridad.md`](seguridad.md#5-respaldos-rnf-5)). |
+| `npm run backup:listar` | Lista los respaldos y verifica su integridad. |
+| `npm run backup:verificar -- <archivo>` | Verifica un respaldo (integridad y SHA-256). |
+| `npm run backup:restaurar -- <archivo>` | Restaura un respaldo. **Detener la API antes.** |
 
 ---
 
@@ -81,9 +86,11 @@ La API queda en **`http://localhost:3000/api`**. Al iniciar, la consola debe mos
 | Archivo | Función |
 | :--- | :--- |
 | `db/schema.sql` | Definición de tablas, restricciones `CHECK`, índices y triggers. Es idempotente (`IF NOT EXISTS`). |
-| `db/database.js` | Abre la conexión (`better-sqlite3`), activa `WAL` y `foreign_keys`, aplica el esquema y crea los usuarios de prueba y el catálogo de unidades si no existen. Lo usan todas las rutas mediante `require('../../db/database')`. |
+| `db/database.js` | Abre la conexión (`better-sqlite3`), activa `WAL` y `foreign_keys`, aplica el esquema, migra columnas nuevas en bases antiguas, crea los usuarios de prueba (contraseñas con hash **bcrypt**) y el catálogo de unidades si no existen, y convierte a hash cualquier contraseña antigua en texto plano. Lo usan todas las rutas mediante `require('../../db/database')`. |
+| `db/backup.js` | Respaldos verificables (integridad + SHA-256), cifrado opcional AES-256-GCM, rotación, restauración y respaldo automático. |
 | `db/seed.js` | Carga inicial de los 106 activos y su bitácora. |
 | `db/inventario.db` | Archivo de datos generado. **Está en `.gitignore`: no se sube al repositorio.** |
+| `db/backups/` | Respaldos generados. También en `.gitignore`. |
 
 ### 3.2 Tablas
 
@@ -91,7 +98,9 @@ La API queda en **`http://localhost:3000/api`**. Al iniciar, la consola debe mos
 | :--- | :--- |
 | `activos` | Modelo canónico de la **Tabla 7** del informe (23 campos). Clave primaria `id_activo`. |
 | `historial` | Bitácora de eventos del ciclo de vida: `ALTA`, `EDICION`, `TRASLADO`, `BAJA`, `IMPORTACION`, `MANTENIMIENTO`. **Inmutable.** |
-| `usuarios` | Usuarios del sistema con su `rol` (`admin_ti`, `jefatura`, `lectura`) y `unidad`. |
+| `usuarios` | Usuarios del sistema con su `rol` (`admin_ti`, `jefatura`, `lectura`), `unidad`, `activo` (0 = acceso revocado), fechas de creación/actualización y `ultimo_acceso`. La columna `password` guarda **solo el hash bcrypt**. |
+| `auditoria` | Registro de seguridad de logins, escrituras, exportaciones, gestión de usuarios y respaldos. **Inmutable.** |
+| `conciliaciones` y `conciliacion_activos` | Conciliación física por muestra del 10% (módulo de Gaby). |
 | `unidades` | Catálogo de las 13 unidades municipales. |
 | `licencias` | Licencias adicionales que no son un activo de categoría `Software` (opcional, ver §6.4). |
 | `proveedores` | Reservada para el registro de proveedores (Ley 19.886). Actualmente sin uso. |
@@ -132,7 +141,7 @@ Las fechas se guardan como texto ISO `YYYY-MM-DD`; los eventos del historial, co
 | `jefe_dideco` | `password123` | `jefatura` | DIDECO |
 | `auditor` | `password123` | `lectura` | Control |
 
-> El login también acepta las contraseñas del contrato (`admin123`, `dideco123`, `control123`).
+> En la base solo se guarda el hash bcrypt de `password123`. Las contraseñas alternativas antiguas (`admin123`, `dideco123`, `control123`) **ya no funcionan**: estaban escritas en el código y eran una puerta trasera.
 
 ### 4.2 `npm run seed` es seguro de repetir
 
@@ -364,9 +373,11 @@ Todos los errores siguen el formato del contrato:
 | Código | Cuándo |
 | :--- | :--- |
 | `400 BAD_REQUEST` | Parámetro inválido (por ejemplo `?dias=abc`). |
-| `401 UNAUTHORIZED` | Sin token, token inválido o expirado (vigencia: 8 horas). |
+| `401 UNAUTHORIZED` | Sin token, token inválido o expirado (vigencia: 8 horas), o cuenta revocada. |
 | `403 FORBIDDEN` | `jefatura` intentando ver un activo o historial de otra unidad. |
 | `404 NOT_FOUND` | El `id_activo` no existe. |
+| `409 CONFLICT` | Conflicto de estado (por ejemplo, trasladar o dar de baja un activo que ya está de baja). |
+| `429 TOO_MANY_REQUESTS` | Más de 10 intentos fallidos de inicio de sesión en 15 minutos desde la misma IP. |
 
 ---
 
@@ -395,34 +406,46 @@ npm test
 Resultado esperado:
 
 ```
-# tests 66
-# pass 66
+# tests 136
+# pass 136
 # fail 0
 ```
 
 | Archivo | Pruebas | Qué verifica |
 | :--- | :--- | :--- |
-| `tests/db.test.js` | 22 | Los 106 activos y su distribución; coherencia de datos (formato de IDs, unidades, fechas, motivo de baja); eventos `ALTA`/`BAJA`; que repetir el seed no borre ni sobrescriba nada; inmutabilidad de la bitácora; restricciones `CHECK` y clave primaria. |
-| `tests/consultas.test.js` | 44 | Endpoints 2 a 6 con los tres roles: `401` sin token, paginación y límites, filtros y búsqueda, enmascarado de campos reservados, aislamiento de `jefatura` (`403`), orden del historial, y alertas (ventana de días, `dias_restantes`, exclusión de bajas, software como licencias, validación `400`). |
+| `tests/db.test.js` | 22 | Los 106 activos y su distribución; coherencia de datos; eventos `ALTA`/`BAJA`; que repetir el seed no borre ni sobrescriba nada; inmutabilidad de la bitácora; restricciones `CHECK`. |
+| `tests/consultas.test.js` | 44 | Endpoints 2 a 6 con los tres roles: `401`, paginación, filtros, búsqueda, enmascarado, aislamiento de `jefatura` (`403`), historial y alertas. |
+| `tests/escrituras.test.js` | 16 | Endpoints 7 a 10 (Ivan) y 20 (mantenciones): permisos por rol, bitácora de cada operación, validaciones y conflictos `409` con activos dados de baja. |
+| `tests/seguridad.test.js` | 32 | Contraseñas bcrypt y migración, tokens falsificados, `helmet`, CORS, gestión de usuarios y revocación inmediata, auditoría inmutable, CSV enmascarado e inyección de fórmulas, límite de intentos. |
+| `tests/respaldos.test.js` | 7 | Crear, verificar, detectar alteraciones, cifrar, rotar y restaurar respaldos. |
+| `tests/reportes-importar.test.js`, `tests/conciliaciones.test.js` | 15 | Reportes, importación y conciliación física (módulos de Gaby). |
 | `tests/helpers.js` | — | Base temporal por archivo, servidor en puerto libre y utilidades de fechas. |
 
 Características:
 
 - **No tocan `db/inventario.db`:** cada archivo crea una base SQLite temporal y la elimina al terminar.
-- **No dependen de la fecha:** las pruebas de alertas insertan activos con fechas relativas a hoy.
+- **No dependen de la fecha:** las pruebas de alertas y mantenciones usan fechas relativas a hoy.
 - **Sin dependencias extra:** usan `node:test`, `node:assert` y `fetch`, incluidos en Node.
-- Para ejecutar un solo archivo: `node --test tests/db.test.js`.
+- Para ejecutar un solo archivo: `node --test tests/seguridad.test.js`.
 
 ---
 
 ## 9. Variables de entorno
 
+Plantilla completa en `backend/.env.example`. Las principales:
+
 | Variable | Por defecto | Uso |
 | :--- | :--- | :--- |
 | `PORT` | `3000` | Puerto de la API. |
-| `JWT_SECRET` | valor de desarrollo | Clave de firma de tokens. **Cambiar en cualquier ambiente que no sea local.** |
+| `NODE_ENV` | `development` | En `production` la API exige `JWT_SECRET` y oculta detalles de errores internos. |
+| `JWT_SECRET` | aleatorio por arranque (solo desarrollo) | Clave de firma de tokens, mínimo 32 caracteres. **Obligatoria en producción.** |
+| `CORS_ORIGIN` | `http://localhost:5173,http://localhost:4173` | Orígenes del frontend autorizados. |
+| `LOGIN_MAX_INTENTOS` / `LOGIN_VENTANA_MINUTOS` | `10` / `15` | Límite de intentos fallidos de login por IP. |
 | `DB_PATH` | `db/inventario.db` | Ruta del archivo SQLite (las pruebas la redirigen a una carpeta temporal). |
-| `APP_TZ` | `America/Santiago` | Zona horaria usada para calcular "hoy" en las alertas. |
+| `APP_TZ` | `America/Santiago` | Zona horaria para "hoy" en alertas y mantenciones. |
+| `BACKUP_AUTO` / `BACKUP_INTERVALO_HORAS` / `BACKUP_RETENCION` | `true` / `24` / `14` | Respaldo automático mientras la API corre. |
+| `BACKUP_DIR` | `db/backups` | Carpeta de respaldos. |
+| `BACKUP_CLAVE` | — | Si se define, los respaldos se cifran con AES-256-GCM. |
 
 ---
 
@@ -436,5 +459,8 @@ Características:
 | Se pueden borrar activos con historial / la bitácora acepta `UPDATE` | Base creada antes de los triggers y del `RESTRICT`. | `npm run seed:reset`. |
 | `EBUSY` o `EPERM` al hacer `seed:reset` (Windows) | El servidor tiene la base abierta. | Detener el servidor (`Ctrl + C`) y repetir. |
 | `EADDRINUSE: address already in use :::3000` | Ya hay otra instancia de la API corriendo. | Cerrarla o usar otro puerto: `PORT=3001 npm start`. |
-| `401` en todas las consultas | Falta el encabezado `Authorization: Bearer <token>` o el token expiró (8 h). | Volver a hacer login. |
+| `401` en todas las consultas | Falta el encabezado `Authorization: Bearer <token>`, el token expiró (8 h), la API se reinició sin `JWT_SECRET` fijo o la cuenta fue revocada. | Volver a hacer login; definir `JWT_SECRET` en `backend/.env`. |
+| La API no inicia: `JWT_SECRET no está definido o es inseguro` | `NODE_ENV=production` sin `JWT_SECRET` de 32+ caracteres. | Generarlo con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` y ponerlo en `backend/.env`. |
+| `429` al iniciar sesión | Más de 10 intentos fallidos en 15 minutos. | Esperar 15 minutos o reiniciar la API (en desarrollo). |
+| El frontend dejó de conectarse al backend tras hacer pull | `frontend/.env` ya no está en el repositorio (no debe subirse). | Copiar `frontend/.env.example` como `frontend/.env` y poner `VITE_USE_MOCK=false`. |
 | `[RESERVADO]` en `criticidad` | Comportamiento esperado para `jefatura` y `lectura`. | Iniciar sesión como `admin` para ver los valores reales. |

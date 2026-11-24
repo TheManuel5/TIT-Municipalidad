@@ -23,13 +23,43 @@ El documento canónico para todo el equipo es:
 👉 **[`docs/contrato-api.md`](docs/contrato-api.md)**
 
 Contiene:
-1. **Los 19 Endpoints oficiales:** especificaciones HTTP, parámetros query, payload y códigos de estado.
+1. **Los 26 Endpoints oficiales:** especificaciones HTTP, parámetros query, payload y códigos de estado.
 2. **Nombres canónicos de los campos de la base de datos:** correspondientes a la **Tabla 7** (*Estructura del modelo de inventario tecnológico y criterios de reserva*) del Informe del Plan Informático.
 3. **JSON de ejemplo** para cada respuesta de la API.
 4. **Matriz de Seguridad y Roles:**
    - `admin_ti`: visualización total (incluyendo IP/VLAN/versión y criticidad), altas, traslados, bajas e importación CSV.
    - `jefatura`: filtrado automático por su unidad (ej: `DIDECO`), campos reservados enmascarados como `[RESERVADO]`.
    - `lectura`: solo lectura institucional sin botones de modificación y con campos reservados protegidos.
+
+---
+
+## 🧰 Stack Tecnológico
+
+| Capa | Tecnología | Propósito |
+| :--- | :--- | :--- |
+| Frontend | React 18 + Vite 6 + CSS propio + `lucide-react` | Interfaz web responsiva para funcionarios y administradores. |
+| Backend | Node.js + Express 5 + JWT (`jsonwebtoken`) | API REST de 26 endpoints con control de acceso por rol. |
+| Base de datos | SQLite (`better-sqlite3`) | Base embebida, sin servidor adicional; migrable a PostgreSQL. |
+| Seguridad | `bcryptjs`, `helmet`, `express-rate-limit`, `cors` | Hash de contraseñas, cabeceras seguras, límite de intentos y CORS restringido. |
+| Auditoría y respaldos | Triggers SQLite + `crypto` de Node | Registro inmutable; respaldos verificados (SHA-256) y cifrables (AES-256-GCM). |
+| Pruebas | `node:test` (incluido en Node) | 136 pruebas automáticas del backend. |
+
+📄 Documentación técnica: [`docs/manual-base-datos-y-consultas.md`](docs/manual-base-datos-y-consultas.md) · [`docs/seguridad.md`](docs/seguridad.md)
+
+---
+
+## ⚙️ Puesta en Marcha del Backend
+
+```bash
+cd backend
+npm install
+cp .env.example .env      # en Windows: copy .env.example .env  (y completar JWT_SECRET)
+npm run seed              # crea db/inventario.db con los 106 activos
+npm start                 # API en http://localhost:3000/api
+npm test                  # 136 pruebas automáticas
+```
+
+Comandos útiles: `npm run seed:reset` (volver al estado inicial), `npm run backup` (respaldo verificado), `npm run backup:listar`, `npm run backup:restaurar -- <archivo>`.
 
 ---
 
@@ -54,15 +84,19 @@ npm run dev
 El frontend estará disponible en: **`http://localhost:5173`**
 
 ### 3. Modos de Ejecución (`VITE_USE_MOCK`)
-El archivo `frontend/.env` controla la fuente de datos:
+El archivo `frontend/.env` controla la fuente de datos. **No se sube al repositorio:** créelo copiando `frontend/.env.example`.
 - **`VITE_USE_MOCK=true` (Modo Simulado por defecto):** utiliza `api.mock.js` con almacenamiento persistente en `localStorage`. Incluye los 106 activos del informe (64 PC, 18 impresoras, 14 equipos de red, 2 servidores y 8 aplicaciones), alertas de vencimiento dentro de 60 días y trazabilidad completa. Permite probar y evaluar el frontend al 100% de forma autónoma.
 - **`VITE_USE_MOCK=false` (Modo Real):** activa `api.real.js` para consumir el backend Express (`http://localhost:3000/api`) desarrollado por Ivan, Alfredo y Gaby.
+
+- **`VITE_MODO_DEMO=false`:** oculta el selector "Simular rol", el acceso rápido y las credenciales precargadas (usar en un despliegue real).
 
 ### 4. Credenciales de Prueba (3 Roles)
 En la pantalla de Login y en la barra superior se incluye un selector rápido de usuarios de prueba:
 1. **Administrador TI:** `admin` / `password123` (Rol: `admin_ti`, Unidad: `Informática`)
 2. **Jefatura de Unidad:** `jefe_dideco` / `password123` (Rol: `jefatura`, Unidad: `DIDECO`)
 3. **Auditoría / Control:** `auditor` / `password123` (Rol: `lectura`, Unidad: `Control`)
+
+> Las contraseñas se guardan solo como hash bcrypt. En un despliegue real, cambie estas contraseñas o desactive estas cuentas desde **Seguridad y Accesos**.
 
 ### 5. Preparar la base de datos después de actualizar el esquema
 
@@ -90,4 +124,19 @@ Este comando elimina y vuelve a crear `db/inventario.db` con el esquema y datos 
 8. **Importación Masiva (CSV):** arrastre de archivo CSV, descarga de plantilla estándar, carga de lote de prueba rápido, análisis fila por fila con discriminación entre filas válidas y erróneas, y procesamiento masivo con registro automático en bitácora.
 9. **Conciliación Física:** muestra aleatoria del 10% de activos vigentes, captura de diferencias y aceptación con un máximo de 5% de discrepancias.
 10. **Control de recepción:** las altas e importaciones exigen confirmar la recepción física/documental y registrar la orden de compra o contrato.
-11. **Visor del Contrato API:** pantalla integrada con la especificación de los 19 endpoints para referencia en vivo.
+11. **Registro de Mantenciones:** botón en la ficha del activo para registrar mantenciones preventivas o correctivas, con su evento en la bitácora (RF-2).
+12. **Seguridad y Accesos:** cambio de la propia contraseña; gestión de cuentas, roles, unidades y revocación inmediata de accesos (admin TI, RF-6); y registro de auditoría inmutable (admin TI y Control, RNF-6).
+13. **Visor del Contrato API:** pantalla integrada con la especificación de los 26 endpoints para referencia en vivo.
+
+---
+
+## 🔐 Seguridad (resumen)
+
+- Contraseñas con hash **bcrypt**; sin contraseñas escritas en el código.
+- `JWT_SECRET` obligatorio en producción; revocación de cuentas con efecto inmediato.
+- Límite de intentos de login, cabeceras `helmet` y CORS restringido.
+- Campos reservados (criticidad, IP/VLAN) enmascarados también en la exportación CSV; protección contra inyección de fórmulas.
+- Bitácora de activos y registro de auditoría **inmutables** a nivel de base de datos.
+- Respaldos automáticos verificados (integridad + SHA-256), con rotación y cifrado opcional.
+
+Detalle y checklist de producción en [`docs/seguridad.md`](docs/seguridad.md).

@@ -1,7 +1,7 @@
 # Contrato de API REST - Sistema de Gestión de Inventario Tecnológico (Proyecto A)
 **Municipalidad de San Pablo - Plan Informático Municipal 2027–2031**  
 **Responsable del Contrato:** Manuel (Frontend & API Contract)  
-**Versión:** 1.0.0  
+**Versión:** 1.1.0 (seguridad, usuarios, auditoría y mantenciones)  
 **Fecha:** Noviembre 2026  
 **Referencia:** Sección 6.2 (Tabla 7 del Informe: *Estructura del modelo de inventario tecnológico y criterios de reserva*) y Tabla 26 (*Ficha del Proyecto A*).
 
@@ -22,7 +22,8 @@
    - `401 Unauthorized`: Token no proporcionado, expirado o inválido.
    - `403 Forbidden`: El rol del usuario no tiene permisos para esta acción o para ver este recurso.
    - `404 Not Found`: Recurso no encontrado.
-   - `409 Conflict`: Conflicto de unicidad (ej. `id_activo` ya registrado).
+   - `409 Conflict`: Conflicto de unicidad (ej. `id_activo` ya registrado) o de estado (ej. trasladar o dar de baja un activo que ya está de baja).
+   - `429 Too Many Requests`: Demasiados intentos fallidos de inicio de sesión (código `TOO_MANY_REQUESTS`).
    - `500 Internal Server Error`: Error no controlado en el servidor.
 5. **Estructura Estándar de Respuesta:**
    ```json
@@ -76,6 +77,15 @@ Esta tabla define el modelo canónico del activo tecnológico. Ivan y Alfredo de
 | `responsable_revision` | `TEXT` | Interno | Funcionario de TI que verificó el registro. | `"Felipe Oyarzún Mansilla"` |
 | `motivo_baja` | `TEXT` | Interno | Requerido únicamente cuando `estado_operativo = 'De baja'`. | `"Obsolescencia tecnológica no reparable"` |
 
+6. **Seguridad transversal (v1.1):**
+   - Contraseñas almacenadas solo como hash **bcrypt** (`bcryptjs`, costo 10). Política: mínimo 8 caracteres, al menos una letra y un número.
+   - Tokens JWT `HS256` con vigencia de 8 horas. `JWT_SECRET` obligatorio en producción (mín. 32 caracteres).
+   - En cada petición se verifica que la cuenta siga **activa**: revocar un usuario invalida sus sesiones abiertas de inmediato, y los cambios de rol o unidad aplican al instante.
+   - Límite de 10 intentos fallidos de login por IP cada 15 minutos (`express-rate-limit`).
+   - Cabeceras HTTP de seguridad (`helmet`) y CORS restringido a los orígenes del frontend (`CORS_ORIGIN`).
+   - Toda escritura, inicio de sesión, exportación, gestión de usuarios y respaldo queda en el **registro de auditoría inmutable** (Endpoint 26).
+   - Detalle completo en [`docs/seguridad.md`](seguridad.md).
+
 ---
 
 ## 3. Matriz de Roles y Visibilidad de Información
@@ -88,14 +98,23 @@ El sistema contempla tres roles institucionales (conforme al Plan Informático y
 | **`jefatura`** | **Solo activos de su propia unidad** (ej. si su unidad es `'DIDECO'`, el backend filtra automáticamente `WHERE unidad = 'DIDECO'`). | **Ocultos o enmascarados** (`null` o `"[RESERVADO]"`). | Solo lectura y exportación de su unidad. |
 | **`lectura`** | Todos los activos del municipio (modo auditoría/transparencia). | **Ocultos o enmascarados** (`null` o `"[RESERVADO]"`). | Solo lectura y exportación. No puede crear, editar ni trasladar. |
 
+**Permisos de seguridad y mantención (v1.1):**
+
+| Acción | `admin_ti` | `jefatura` | `lectura` |
+| :--- | :---: | :---: | :---: |
+| Registrar mantención (Endpoint 20) | ✅ | ❌ | ❌ |
+| Cambiar su propia contraseña (Endpoint 21) | ✅ | ✅ | ✅ |
+| Gestionar usuarios y privilegios (Endpoints 22–25) | ✅ | ❌ | ❌ |
+| Consultar el registro de auditoría (Endpoint 26) | ✅ | ❌ | ✅ (Control) |
+
 ### Regla para Ivan (Middleware de Roles en backend):
 Si `req.user.rol !== 'admin_ti'`:
-- Eliminar de las respuestas JSON los atributos `criticidad` y `configuracion_red` (o establecerlos en `null`).
+- Enmascarar los atributos `criticidad` y `configuracion_red` en **todas** las salidas, incluida la exportación CSV (solo se enmascaran si el objeto los contiene; no se agregan a respuestas que no son activos).
 - Si `req.user.rol === 'jefatura'`, forzar el filtro de consulta por `unidad = req.user.unidad`.
 
 ---
 
-## 4. Los 19 Endpoints de la API
+## 4. Los 26 Endpoints de la API
 
 ### 4.1 Autenticación (Ivan)
 
@@ -124,10 +143,12 @@ Si `req.user.rol !== 'admin_ti'`:
     }
   }
   ```
-- **Usuarios de prueba estándar:**
-  1. `admin` / `admin123` (rol: `admin_ti`, unidad: `Informática`)
-  2. `jefe_dideco` / `dideco123` (rol: `jefatura`, unidad: `DIDECO`)
-  3. `auditor` / `control123` (rol: `lectura`, unidad: `Control`)
+- **Usuarios de prueba estándar** (contraseña `password123` para los tres; se guarda solo su hash):
+  1. `admin` (rol: `admin_ti`, unidad: `Informática`)
+  2. `jefe_dideco` (rol: `jefatura`, unidad: `DIDECO`)
+  3. `auditor` (rol: `lectura`, unidad: `Control`)
+- **Errores:** `400` si falta usuario o contraseña; `401` con el mismo mensaje si el usuario no existe, la contraseña es incorrecta o la cuenta está desactivada (no revela qué usuarios existen); `429` tras 10 intentos fallidos en 15 minutos.
+- Ya no existen contraseñas alternativas (`admin123`, `dideco123`, `control123`): se eliminaron del código por ser una puerta trasera.
 
 ---
 
@@ -510,10 +531,6 @@ Si `req.user.rol !== 'admin_ti'`:
   }
   ```
 
-#### Reporte complementario: `GET /api/reportes/garantias?dias=90`
-- **Descripción:** Garantías y licencias que vencen hoy o dentro del período indicado (máximo 3650 días). No incluye vencimientos pasados ni activos dados de baja. Aplica el filtro de unidad para `jefatura`.
-- **Respuesta:** mismo objeto `data` que `GET /api/alertas`, con `garantias_por_vencer` y `licencias_por_vencer`.
-
 #### Endpoint 13: `POST /api/importar`
 - **Descripción:** Carga masiva de activos desde archivo CSV (Solo `admin_ti`).
 - **Formato:** payload JSON `{ "recepcion_verificada": true, "filas": [ ... ] }`. El frontend analiza el CSV y envía las filas válidas.
@@ -544,17 +561,14 @@ Si `req.user.rol !== 'admin_ti'`:
   }
   ```
 
-#### Endpoint Complementario: `GET /api/exportar?formato=csv|json`
-- **Descripción:** Descarga del inventario completo en formato estándar (Ley 21.180).
-- Retorna archivo descargable `.csv` o arreglo JSON. Respeta filtros de rol.
-
 #### Endpoint 14: `GET /api/reportes/garantias?dias=90`
 - **Descripción:** Garantías y licencias que vencen hoy o dentro del plazo solicitado.
 - Excluye vencimientos pasados y bienes dados de baja; respeta el filtro de unidad de `jefatura`.
 
 #### Endpoint 15: `GET /api/exportar?formato=csv|json`
-- **Descripción:** Exporta activos como CSV o JSON, con campos protegidos según el rol autenticado.
+- **Descripción:** Exporta activos como CSV o JSON, con campos protegidos según el rol autenticado (Ley 21.180).
 - Valores permitidos para `formato`: `csv` y `json`.
+- **Seguridad (v1.1):** el CSV también enmascara `criticidad` y `configuracion_red` para `jefatura` y `lectura`; las celdas que empiezan con `=`, `+`, `-` o `@` se prefijan con `'` para que Excel no ejecute fórmulas (inyección CSV). Cada exportación queda auditada.
 
 ### 4.5 Conciliación física y control de recepción
 
@@ -588,6 +602,84 @@ Los endpoints requieren Bearer JWT. `admin_ti` puede iniciar sesiones e inspecci
 - **Payload (bien no encontrado):** `{ "encontrado": false, "detalle": "No se encontró en la ubicación informada." }`.
 - Si hay discrepancias se exige `detalle`. Cada activo de la muestra se registra una sola vez; la sesión se cierra al completar toda la muestra.
 
+### 4.6 Mantenciones (Alfredo)
+
+#### Endpoint 20: `POST /api/activos/:id/mantenimiento`
+- **Permiso:** Solo `admin_ti`.
+- **Descripción:** Registra una mantención preventiva o correctiva (RF-2). Actualiza `ultimo_mantenimiento`, `tipo_mantenimiento` y, opcionalmente, `estado_operativo`, y agrega el evento `MANTENIMIENTO` a la bitácora.
+- **Payload:**
+  ```json
+  {
+    "tipo_mantenimiento": "Correctiva",
+    "descripcion": "Cambio de fuente de poder",
+    "fecha": "2026-11-24",
+    "estado_resultante": "Bueno",
+    "responsable": "Soporte TI interno",
+    "costo": 45000
+  }
+  ```
+  `tipo_mantenimiento` (`Preventiva` | `Correctiva`) y `descripcion` son obligatorios. `fecha` es opcional (por defecto hoy, no puede ser futura). `estado_resultante` admite `Bueno`, `Regular`, `Malo` o `En reparación` (para dar de baja se usa el Endpoint 10).
+- **Respuesta (201 Created):**
+  ```json
+  {
+    "success": true,
+    "message": "Mantención registrada en la bitácora.",
+    "data": { "id_activo": "SP-HW-0042", "tipo_mantenimiento": "Correctiva", "ultimo_mantenimiento": "2026-11-24", "estado_operativo": "Bueno" }
+  }
+  ```
+- **Errores:** `400` datos inválidos, `404` activo inexistente, `409` activo dado de baja. Una mantención con fecha anterior a la última registrada queda en la bitácora sin retroceder `ultimo_mantenimiento`.
+
+### 4.7 Seguridad y Accesos (Alfredo)
+
+#### Endpoint 21: `PUT /api/auth/password`
+- **Permiso:** Cualquier usuario autenticado (su propia cuenta).
+- **Payload:** `{ "password_actual": "...", "password_nueva": "..." }`
+- **Errores:** `401` contraseña actual incorrecta; `400` la nueva no cumple la política o es igual a la actual.
+
+#### Endpoint 22: `GET /api/usuarios`
+- **Permiso:** Solo `admin_ti`.
+- **Respuesta:** lista de cuentas **sin contraseñas ni hashes**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      { "id": 1, "username": "admin", "nombre": "Felipe Oyarzún Mansilla", "rol": "admin_ti", "unidad": "Informática", "activo": true, "creado_en": "2026-11-24T20:00:00.000Z", "actualizado_en": "2026-11-24T20:00:00.000Z", "ultimo_acceso": "2026-11-24T20:24:00.000Z" }
+    ]
+  }
+  ```
+
+#### Endpoint 23: `POST /api/usuarios`
+- **Permiso:** Solo `admin_ti` (aprobación de un acceso solicitado por la jefatura).
+- **Payload:** `{ "username": "jefe_dom", "nombre": "Rodrigo Alarcón Fuentes", "rol": "jefatura", "unidad": "DOM", "password": "ClaveInicial2026" }`
+- `username`: 3 a 30 caracteres en minúscula (letras, números, `.`, `_`, `-`). `unidad` debe existir en el catálogo.
+- **Respuesta:** `201` con el usuario creado. **Errores:** `400` datos inválidos, `409` username ya existe.
+
+#### Endpoint 24: `PUT /api/usuarios/:id`
+- **Permiso:** Solo `admin_ti`.
+- **Payload (todos opcionales):** `{ "nombre": "...", "rol": "lectura", "unidad": "DAF", "activo": false }`
+- `activo: false` **revoca** el acceso de inmediato (incluidas las sesiones abiertas); `activo: true` lo reactiva. Las cuentas no se eliminan, para conservar la trazabilidad.
+- **Errores:** `404` usuario inexistente; `409` si un `admin_ti` intenta desactivarse o quitarse el rol a sí mismo, o si el cambio dejaría al sistema sin administradores activos.
+
+#### Endpoint 25: `PUT /api/usuarios/:id/password`
+- **Permiso:** Solo `admin_ti`.
+- **Descripción:** Restablece la contraseña de un usuario (contraseña temporal). **Payload:** `{ "password_nueva": "Temporal2026" }`
+
+#### Endpoint 26: `GET /api/auditoria`
+- **Permiso:** `admin_ti` y `lectura` (Control). `jefatura` recibe `403`.
+- **Parámetros:** `usuario`, `accion` (prefijo, ej. `LOGIN`, `USUARIO`, `ESCRITURA`, `EXPORTACION`, `RESPALDO`), `resultado` (`OK` | `RECHAZADO` | `ERROR`), `desde` y `hasta` (`YYYY-MM-DD`), `page`, `limit` (máx. 200).
+- **Respuesta:**
+  ```json
+  {
+    "success": true,
+    "data": [
+      { "id": 42, "fecha": "2026-11-24T20:24:10.000Z", "usuario": "admin", "rol": "admin_ti", "ip": "127.0.0.1", "accion": "USUARIO_REVOCADO", "metodo": "PUT", "ruta": "/api/usuarios/4", "estado_http": 200, "resultado": "OK", "detalle": "username=jefe_dom; activo: 1 -> 0" }
+    ],
+    "meta": { "total": 1, "page": 1, "limit": 50, "totalPages": 1 }
+  }
+  ```
+- El registro es **inmutable** (la base de datos rechaza `UPDATE` y `DELETE`) y **nunca** contiene contraseñas ni el cuerpo de las peticiones.
+- Acciones registradas: `LOGIN_OK`, `LOGIN_FALLIDO`, `LOGIN_BLOQUEADO`, `ESCRITURA <MÉTODO>`, `EXPORTACION`, `USUARIO_CREADO`, `USUARIO_MODIFICADO`, `USUARIO_REVOCADO`, `USUARIO_REACTIVADO`, `USUARIO_PASSWORD_RESTABLECIDA`, `AUDITORIA_CONSULTADA`, `RESPALDO_CREADO`, `RESPALDO_ERROR`, `RESPALDO_RESTAURADO`.
+
 ---
 
 ## 5. Resumen de Asignaciones Técnicas
@@ -602,6 +694,8 @@ graph TD
     E --> G[Gaby: routes/reportes.js & importar.js]
     F --> G
     D --> H[Gaby: Paso 4 - Conectar frontend con api.real.js]
+    B --> I[Alfredo: seguridad, usuarios, auditoría, respaldos y mantenciones]
+    C --> I
 ```
 
 Cualquier discrepancia se resolverá tomando este contrato como fuente única de verdad.
