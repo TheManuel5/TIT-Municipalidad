@@ -27,7 +27,7 @@ import {
   Calendar,
   Layers
 } from 'lucide-react';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
 
 export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo }) {
   const { user } = useAuth();

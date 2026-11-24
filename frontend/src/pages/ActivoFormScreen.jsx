@@ -2,7 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Save, AlertCircle, ShieldAlert, CheckCircle2 } from 'lucide-react';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
+
+function fechaISOValida(valor) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00.000Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+}
 
 export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, onCancel }) {
   const { user } = useAuth();
@@ -62,21 +68,85 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     e.preventDefault();
     setError(null);
 
-    // Validaciones
-    if (!formData.id_activo.trim()) {
-      setError('El ID de activo es obligatorio (ej: SP-HW-0050).');
+    const camposObligatorios = [
+      ['id_activo', 'ID único'],
+      ['categoria', 'categoría'],
+      ['marca_modelo', 'marca y modelo'],
+      ['ubicacion', 'ubicación física'],
+      ['unidad', 'unidad municipal'],
+      ['custodio', 'funcionario custodio'],
+      ['proveedor', 'proveedor'],
+      ['contrato_oc', 'orden de compra o contrato'],
+      ['fecha_adquisicion', 'fecha de adquisición'],
+      ['fecha_garantia', 'fecha de vencimiento de garantía'],
+      ['costo_inicial', 'costo inicial']
+    ];
+    const campoFaltante = camposObligatorios.find(([campo]) => !String(formData[campo] ?? '').trim());
+    if (campoFaltante) {
+      setError(`Completa el campo obligatorio: ${campoFaltante[1]}.`);
       return;
     }
-    if (!formData.marca_modelo.trim()) {
-      setError('La marca y modelo comercial son obligatorios.');
+
+    if (!CATALOGOS.categorias.includes(formData.categoria)) {
+      setError('Selecciona una categoría válida de la lista.');
       return;
     }
-    if (!formData.ubicacion.trim()) {
-      setError('La ubicación física es obligatoria.');
+    if (!CATALOGOS.unidades.includes(formData.unidad)) {
+      setError('Selecciona una unidad municipal válida de la lista.');
       return;
     }
-    if (!formData.custodio.trim()) {
-      setError('El funcionario custodio responsable es obligatorio.');
+    if (!CATALOGOS.estados_operativos.includes(formData.estado_operativo)) {
+      setError('Selecciona un estado operativo válido de la lista.');
+      return;
+    }
+    if (
+      formData.estado_operativo === 'De baja' &&
+      (!isEdit || initialData?.estado_operativo !== 'De baja')
+    ) {
+      setError('Para dar de baja un activo, cancela este formulario y usa la acción “Dar de baja” para guardar el motivo y la bitácora.');
+      return;
+    }
+    if (!CATALOGOS.criticidades.includes(formData.criticidad)) {
+      setError('Selecciona una criticidad válida de la lista.');
+      return;
+    }
+    if (!CATALOGOS.tipos_mantenimiento.includes(formData.tipo_mantenimiento)) {
+      setError('Selecciona un tipo de mantención válido de la lista.');
+      return;
+    }
+
+    const costoInicial = Number(formData.costo_inicial);
+    const costoAnual = formData.costo_anual === '' ? 0 : Number(formData.costo_anual);
+    if (!Number.isFinite(costoInicial) || costoInicial < 0) {
+      setError('El costo inicial debe ser un número igual o mayor que cero.');
+      return;
+    }
+    if (!Number.isFinite(costoAnual) || costoAnual < 0) {
+      setError('El costo anual debe ser un número igual o mayor que cero.');
+      return;
+    }
+    if (!fechaISOValida(formData.fecha_adquisicion) || !fechaISOValida(formData.fecha_garantia)) {
+      setError('Revisa las fechas: usa una fecha válida en ambos campos.');
+      return;
+    }
+    if (formData.fecha_garantia < formData.fecha_adquisicion) {
+      setError('La fecha de vencimiento de garantía no puede ser anterior a la fecha de adquisición.');
+      return;
+    }
+    if (formData.ultimo_mantenimiento && !fechaISOValida(formData.ultimo_mantenimiento)) {
+      setError('La fecha del último mantenimiento no es válida. Usa el selector de fecha.');
+      return;
+    }
+    const hoyChile = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+    if (formData.ultimo_mantenimiento && formData.ultimo_mantenimiento > hoyChile) {
+      setError('La fecha del último mantenimiento no puede estar en el futuro.');
+      return;
+    }
+    if (
+      !isEdit &&
+      formData.fecha_adquisicion > hoyChile
+    ) {
+      setError('La fecha de adquisición no puede estar en el futuro.');
       return;
     }
     if (!isEdit && !recepcionVerificada) {
@@ -87,11 +157,26 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     setLoading(true);
     try {
       if (isEdit) {
-        await api.updateActivo(formData.id_activo, formData);
+        await api.updateActivo(formData.id_activo, {
+          ...formData,
+          costo_inicial: costoInicial,
+          costo_anual: costoAnual
+        });
       } else {
-        await api.createActivo({ ...formData, recepcion_verificada: true });
+        await api.createActivo({
+          ...formData,
+          id_activo: formData.id_activo.trim().toUpperCase(),
+          marca_modelo: formData.marca_modelo.trim(),
+          ubicacion: formData.ubicacion.trim(),
+          custodio: formData.custodio.trim(),
+          proveedor: formData.proveedor.trim(),
+          contrato_oc: formData.contrato_oc.trim(),
+          costo_inicial: costoInicial,
+          costo_anual: costoAnual,
+          recepcion_verificada: true
+        });
       }
-      onSaveSuccess(formData.id_activo);
+      onSaveSuccess(formData.id_activo.trim().toUpperCase());
     } catch (err) {
       setError(err.message || 'Error guardando datos del activo.');
     } finally {
@@ -159,6 +244,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 onChange={handleChange}
                 placeholder="SP-HW-XXXX / SP-SW-XXXX"
                 disabled={isEdit}
+                maxLength={64}
                 required
               />
               <span className="form-helper">Clave primaria inalterable una vez registrado.</span>
@@ -188,6 +274,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 value={formData.marca_modelo}
                 onChange={handleChange}
                 placeholder="Ej: Lenovo ThinkPad E14 Gen 4 / HP LaserJet Pro 4003dw"
+                maxLength={200}
                 required
               />
             </div>
@@ -238,6 +325,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 value={formData.custodio}
                 onChange={handleChange}
                 placeholder="Ej: Marcela Huenchumán Soto"
+                maxLength={200}
                 required
               />
             </div>
@@ -251,6 +339,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 value={formData.ubicacion}
                 onChange={handleChange}
                 placeholder="Ej: DIDECO - Equipo Territorial Quilacahuín / Edificio Consistorial Oficina 204"
+                maxLength={200}
                 required
               />
             </div>
@@ -264,9 +353,14 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 onChange={handleChange}
                 required
               >
-                {CATALOGOS.estados_operativos.map((e) => (
+                {CATALOGOS.estados_operativos
+                  .filter((estado) =>
+                    estado !== 'De baja' ||
+                    (isEdit && initialData?.estado_operativo === 'De baja')
+                  )
+                  .map((e) => (
                   <option key={e} value={e}>{e}</option>
-                ))}
+                  ))}
               </select>
             </div>
 
@@ -301,6 +395,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 value={formData.proveedor}
                 onChange={handleChange}
                 placeholder="Ej: Proveedor TI Sur Ltda."
+                maxLength={200}
                 required
               />
             </div>
@@ -314,6 +409,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 value={formData.contrato_oc}
                 onChange={handleChange}
                 placeholder="OC 4521-12-SE25"
+                maxLength={100}
                 required
               />
             </div>
@@ -352,6 +448,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 onChange={handleChange}
                 placeholder="650000"
                 min="0"
+                step="1"
                 required
               />
             </div>
@@ -366,6 +463,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 onChange={handleChange}
                 placeholder="0"
                 min="0"
+                step="1"
               />
             </div>
 

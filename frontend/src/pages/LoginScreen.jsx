@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, KeyRound, Building, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Building, AlertCircle, ArrowRight } from 'lucide-react';
+
+const cuentasIniciales = [
+  { username: 'admin', nombre: 'Administrador TI', unidad: 'Informática' },
+  { username: 'jefe_dideco', nombre: 'Jefatura', unidad: 'DIDECO' },
+  { username: 'auditor', nombre: 'Auditoría / Control', unidad: 'Control' }
+];
 
 export function LoginScreen() {
-  const { login, loading, testUsers } = useAuth();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('password123');
+  const { login, loading } = useAuth();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('expired=1')) {
       window.history.replaceState({}, '', window.location.pathname.replace(/\/login$/, '') || '/');
@@ -18,18 +24,14 @@ export function LoginScreen() {
     e.preventDefault();
     setError('');
     try {
-      await login(username, password);
+      if (!username.trim() || !password) {
+        setError('Escribe tu usuario y contraseña para continuar.');
+        return;
+      }
+      await login(username.trim(), password);
     } catch (err) {
       setError(err.message || 'Error al iniciar sesión.');
     }
-  };
-
-  const handleQuickLogin = (testUser) => {
-    setUsername(testUser.username);
-    setPassword('password123');
-    login(testUser.username, 'password123').catch((err) => {
-      setError(err.message);
-    });
   };
 
   return (
@@ -102,7 +104,9 @@ export function LoginScreen() {
               className="form-input"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Ej: admin, jefe_dideco, auditor"
+              placeholder="Escribe tu usuario institucional"
+              autoComplete="username"
+              maxLength={100}
               required
             />
           </div>
@@ -114,7 +118,9 @@ export function LoginScreen() {
               className="form-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
+              placeholder="Escribe tu contraseña"
+              autoComplete="current-password"
+              maxLength={200}
               required
             />
           </div>
@@ -130,65 +136,34 @@ export function LoginScreen() {
           </button>
         </form>
 
-        {/* Acceso Rápido para Demostración */}
-        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-            Acceso Rápido para Pruebas (3 Roles):
+        <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: 8 }}>
+            Usuarios iniciales del sistema
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {testUsers.map((u) => {
-              const isAdmin = u.rol === 'admin_ti';
-              const isJefe = u.rol === 'jefatura';
-              return (
-                <button
-                  key={u.username}
-                  type="button"
-                  onClick={() => handleQuickLogin(u)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#2563eb';
-                    e.currentTarget.style.background = '#eff6ff';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#cbd5e1';
-                    e.currentTarget.style.background = '#f8fafc';
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 600, color: '#0f172a' }}>
-                      {u.nombre}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                      {isAdmin ? '⚙️ Admin TI (Acceso total + IP/Red)' : (isJefe ? `🏢 Jefatura ${u.unidad}` : '👁️ Auditoria Control')}
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '0.7rem',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: isAdmin ? '#f3e8ff' : (isJefe ? '#e0f2fe' : '#f1f5f9'),
-                    color: isAdmin ? '#7e22ce' : (isJefe ? '#0369a1' : '#475569'),
-                    fontWeight: 700
-                  }}>
-                    {u.rol}
-                  </span>
-                </button>
-              );
-            })}
+          <p style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 10 }}>
+            Selecciona tu usuario y escribe la contraseña de tu cuenta. El servidor comprueba el acceso.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {cuentasIniciales.map((cuenta) => (
+              <button
+                key={cuenta.username}
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ justifyContent: 'space-between' }}
+                disabled={loading}
+                onClick={() => {
+                  setUsername(cuenta.username);
+                  setPassword('');
+                  setError('');
+                }}
+              >
+                <span>{cuenta.nombre} · {cuenta.unidad}</span>
+                <span style={{ fontFamily: 'monospace' }}>{cuenta.username}</span>
+              </button>
+            ))}
           </div>
         </div>
+
       </div>
     </div>
   );

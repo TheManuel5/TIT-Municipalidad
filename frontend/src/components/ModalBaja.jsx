@@ -76,6 +76,7 @@ export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
               placeholder="Ej: Falla irreversible en tarjeta madre y costo de reparación supera el 60% del valor residual / Pérdida en terreno / Obsolescencia..."
+              maxLength={1000}
               required
             />
             <span className="form-helper">
@@ -91,6 +92,7 @@ export function ModalBaja({ isOpen, onClose, activo, onConfirm }) {
               value={detalles}
               onChange={(e) => setDetalles(e.target.value)}
               placeholder="Ej: Informe Técnico TI N° 08-2026 / Acta de Enajenación DAF"
+              maxLength={500}
             />
           </div>
         </div>

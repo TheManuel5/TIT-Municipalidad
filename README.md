@@ -10,7 +10,7 @@ Implementa el **Proyecto A** (*Inventario y ciclo de vida de activos tecnológic
 
 | Integrante | Responsabilidad Principal | Entregables / Carpetas |
 | :--- | :--- | :--- |
-| **Manuel** | Contrato de API y Frontend completo con datos simulados | `docs/contrato-api.md`, `frontend/` |
+| **Manuel** | Contrato de API y Frontend integrado con el backend | `docs/contrato-api.md`, `frontend/` |
 | **Alfredo** | Base de datos SQLite, seed (106 activos), endpoints de lectura, pruebas y manual | `db/schema.sql`, `db/database.js`, `db/seed.js`, `backend/routes/consultas.js`, `docs/` |
 | **Ivan** | Servidor Express, autenticación JWT, middleware de roles y endpoints de escritura | `backend/server.js`, `backend/routes/activos.js`, `backend/middlewares/` |
 | **Gaby** | Endpoints de reportes, importación/exportación CSV y conexión con la API real | `backend/routes/reportes.js`, `backend/routes/importar.js`, `frontend/src/api.real.js` |
@@ -33,13 +33,25 @@ Contiene:
 
 ---
 
-## 🚀 Puesta en Marcha del Frontend (Manuel)
+## 🚀 Puesta en Marcha
 
 ### 1. Requisitos
 - Node.js 18+ o 20+
 - npm o pnpm
 
-### 2. Instalación y Ejecución
+### 2. Iniciar el backend
+Desde `backend/`, instala dependencias, inicializa la base de datos de desarrollo sin borrar registros existentes e inicia la API:
+
+```bash
+cd backend
+npm install
+npm run seed
+npm start
+```
+
+La API debe responder en `http://localhost:3000`. El comando `seed:reset` borra la base; úsalo solo si quieres reinicializarla y ya respaldaste los datos.
+
+### 3. Iniciar el frontend
 ```bash
 # Entrar a la carpeta frontend
 cd frontend
@@ -51,15 +63,19 @@ npm install
 npm run dev
 ```
 
-El frontend estará disponible en: **`http://localhost:5173`**
+El frontend estará disponible en: **`http://localhost:5173`**. El puerto es estricto: si está ocupado, el servidor avisa y no cambia a otro puerto automáticamente.
 
-### 3. Modos de Ejecución (`VITE_USE_MOCK`)
-El archivo `frontend/.env` controla la fuente de datos:
-- **`VITE_USE_MOCK=true` (Modo Simulado por defecto):** utiliza `api.mock.js` con almacenamiento persistente en `localStorage`. Incluye los 106 activos del informe (64 PC, 18 impresoras, 14 equipos de red, 2 servidores y 8 aplicaciones), alertas de vencimiento dentro de 60 días y trazabilidad completa. Permite probar y evaluar el frontend al 100% de forma autónoma.
-- **`VITE_USE_MOCK=false` (Modo Real):** activa `api.real.js` para consumir el backend Express (`http://localhost:3000/api`) desarrollado por Ivan, Alfredo y Gaby.
+### 4. Conexión con la API municipal
+El frontend usa exclusivamente el backend Express y SQLite; no hay cambio automático a datos simulados. Configura `frontend/.env` con:
 
-### 4. Credenciales de Prueba (3 Roles)
-En la pantalla de Login y en la barra superior se incluye un selector rápido de usuarios de prueba:
+```env
+VITE_API_URL=http://localhost:3000/api
+```
+
+Inicia también el backend antes de usar el sistema. Si la API no está disponible, la pantalla muestra el error de conexión y no guarda datos localmente.
+
+### 5. Cuentas de acceso de desarrollo (3 roles)
+El backend de desarrollo crea estas cuentas para verificar permisos. En el frontend se ingresa usuario y contraseña; no hay acceso rápido ni selector para cambiar de rol:
 1. **Administrador TI:** `admin` / `password123` (Rol: `admin_ti`, Unidad: `Informática`)
 2. **Jefatura de Unidad:** `jefe_dideco` / `password123` (Rol: `jefatura`, Unidad: `DIDECO`)
 3. **Auditoría / Control:** `auditor` / `password123` (Rol: `lectura`, Unidad: `Control`)

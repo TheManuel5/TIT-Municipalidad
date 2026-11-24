@@ -56,7 +56,7 @@ router.get('/catalogos', (req, res) => {
  * Garantías (hardware) y licencias (software) por vencer dentro de los próximos `dias` días.
  * - Los activos 'De baja' no generan alertas.
  * - Los activos de categoría 'Software' se informan como licencias, no como garantías
- *   (mismo criterio que frontend/src/api.mock.js).
+ *   (mismo criterio que frontend/src/catalogos.js).
  * - dias_restantes es la diferencia exacta en días calendario respecto de hoy (0 = vence hoy).
  */
 router.get('/alertas', aplicarFiltroUnidad, (req, res) => {

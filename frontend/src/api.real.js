@@ -1,8 +1,7 @@
 /**
  * api.real.js - Conexión con la API Real (Express + SQLite)
  * Municipalidad de San Pablo - Plan Informático Municipal 2027-2031 (Proyecto A)
- * Responsabilidad compartida con Gaby (Paso 4: apagar VITE_USE_MOCK=false)
- * Implementa las mismas funciones que api.mock.js con llamadas HTTP fetch reales y manejo de token Bearer.
+ * Implementa las funciones del contrato con llamadas HTTP fetch y manejo de token Bearer.
  */
 
 const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');

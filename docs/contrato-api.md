@@ -596,7 +596,7 @@ Los endpoints requieren Bearer JWT. `admin_ti` puede iniciar sesiones e inspecci
 graph TD
     A[Manuel: docs/contrato-api.md] --> B[Alfredo: schema.sql & seed.js]
     A --> C[Ivan: server.js, auth & escrituras]
-    A --> D[Manuel: frontend Vite + api.mock.js]
+    A --> D[Manuel: frontend Vite + API real]
     B --> E[Alfredo: routes/consultas.js]
     C --> F[Ivan: routes/activos.js & middlewares]
     E --> G[Gaby: routes/reportes.js & importar.js]

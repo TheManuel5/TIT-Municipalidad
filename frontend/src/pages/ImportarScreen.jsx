@@ -17,7 +17,7 @@ import {
   Layers,
   XCircle
 } from 'lucide-react';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
 
 function detectarSeparador(texto) {
   let enComillas = false;
@@ -81,6 +81,18 @@ function parsearCSV(texto) {
   return registros;
 }
 
+function fechaISOValida(valor) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00.000Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+}
+
+function costoValido(valor) {
+  if (!valor.trim()) return true;
+  const costo = Number(valor);
+  return Number.isFinite(costo) && costo >= 0;
+}
+
 export function ImportarScreen({ onActivosImportados }) {
   const { user } = useAuth();
   const isAdmin = user?.rol === 'admin_ti';
@@ -93,6 +105,7 @@ export function ImportarScreen({ onActivosImportados }) {
   const [errorGlobal, setErrorGlobal] = useState(null);
   const [tabFiltro, setTabFiltro] = useState('todas'); // 'todas' | 'validas' | 'errores'
   const [recepcionVerificada, setRecepcionVerificada] = useState(false);
+  const tamanoMaximoArchivo = 10 * 1024 * 1024;
 
   // Descargar plantilla CSV de ejemplo
   const handleDownloadPlantilla = () => {
@@ -116,56 +129,11 @@ export function ImportarScreen({ onActivosImportados }) {
       'contrato_oc',
       'costo_inicial',
       'costo_anual',
-      'configuracion_red'
+      'configuracion_red',
+      'motivo_baja'
     ];
 
-    const ejemplo1 = [
-      'SP-HW-9001',
-      'Portátil',
-      'Lenovo ThinkPad L14 Gen 3',
-      'Notebook 14 pulgadas i5 16GB',
-      'SECPLAN - Oficina Proyectos',
-      'SECPLAN',
-      'Claudio Arriagada Solís',
-      'Bueno',
-      '2026-10-15',
-      'Preventiva',
-      'Alta',
-      'Proceso E',
-      '2026-11-01',
-      '2028-11-01',
-      'Windows 11 Pro OEM',
-      'Austral Tech Ltda',
-      'OC 4521-99-SE26',
-      '750000',
-      '0',
-      '192.168.10.88 / VLAN 10'
-    ];
-
-    const ejemplo2 = [
-      'SP-PRN-9002',
-      'Impresora',
-      'Epson EcoTank L5590',
-      'Multifunción tinta continua',
-      'DIDECO - Fomento Productivo',
-      'DIDECO',
-      'Marcela Huenchumán',
-      'Bueno',
-      '2026-10-20',
-      'Preventiva',
-      'Media',
-      'Proceso A',
-      '2026-11-01',
-      '2027-11-01',
-      'Driver ESC/P-R',
-      'Ofimática Sur',
-      'OC 4521-99-SE26',
-      '320000',
-      '25000',
-      '192.168.20.77 / RAW 9100'
-    ];
-
-    const csvStr = [encabezados.join(';'), ejemplo1.join(';'), ejemplo2.join(';')].join('\n');
+    const csvStr = encabezados.join(';');
     const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -174,20 +142,6 @@ export function ImportarScreen({ onActivosImportados }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  // Cargar datos de prueba
-  const handleLoadSampleData = () => {
-    const dataEjemplo = `id_activo;categoria;marca_modelo;descripcion;ubicacion;unidad;custodio;estado_operativo;costo_inicial;costo_anual;criticidad;contrato_oc
-SP-HW-1001;Portátil;Dell Latitude 3420;Intel i5 11va Gen 16GB RAM;DIDECO - San Pablo Central;DIDECO;Marcela Huenchumán;Bueno;690000;0;Alta;OC 4521-99-SE26
-SP-HW-1002;PC;HP ProDesk 400 G7;Desktop SFF i5 16GB;DAF - Tesorería;DAF;Patricia Navarro;Bueno;610000;0;Media;OC 4521-99-SE26
-SP-PRN-1003;Impresora;HP LaserJet Pro 4003dn;Impresora láser monocromática;DOM - Obras;DOM;Rodrigo Alarcón;Bueno;280000;30000;Media;OC 4521-99-SE26
-SP-NET-1004;Red;Switch TP-Link 24P;Switch no administrable de soporte;Salud - Consultorio;Salud;Mónica Cárdenas;Bueno;140000;10000;Baja;OC 4521-99-SE26
-SP-HW-0001;PC;Equipo Duplicado Test;Debe dar error por ID existente;Secretaría Municipal;Secretaría Municipal;Carolina Muñoz;Bueno;500000;0;Baja;OC 4521-99-SE26
-SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validación;Informática;Informática;Felipe Oyarzún;Bueno;400000;0;Media;OC 4521-99-SE26`;
-
-    setFileName('ejemplo_prueba_rapida.csv');
-    analizarCSV(dataEjemplo);
   };
 
   // Analizar y validar el CSV línea por línea
@@ -216,6 +170,18 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
     const headers = registros[0].map((h, index) =>
       (index === 0 ? h.replace(/^\uFEFF/, '') : h).trim().toLowerCase()
     );
+    const headersDuplicados = headers.filter((header, index) => headers.indexOf(header) !== index);
+    const headersObligatorios = ['id_activo', 'categoria', 'marca_modelo', 'ubicacion', 'unidad', 'custodio', 'contrato_oc'];
+    const headersFaltantes = headersObligatorios.filter((header) => !headers.includes(header));
+    if (headersDuplicados.length || headersFaltantes.length) {
+      const mensajes = [];
+      if (headersDuplicados.length) mensajes.push(`Hay columnas repetidas: ${[...new Set(headersDuplicados)].join(', ')}.`);
+      if (headersFaltantes.length) mensajes.push(`Faltan columnas obligatorias: ${headersFaltantes.join(', ')}.`);
+      setErrorGlobal(mensajes.join(' '));
+      setFilasAnalizadas([]);
+      setResumen(null);
+      return;
+    }
 
     const filas = [];
     const idsVistos = new Set();
@@ -231,8 +197,8 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
 
       const errores = [];
       const idActivo = (filaObj.id_activo || '').trim().toUpperCase();
-      if (valores.length > headers.length) {
-        errores.push('La fila contiene más valores que columnas en la cabecera.');
+      if (valores.length !== headers.length) {
+        errores.push(`La fila tiene ${valores.length} valores, pero la cabecera tiene ${headers.length} columnas.`);
       }
 
       if (!idActivo) {
@@ -255,6 +221,9 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
       for (const campo of ['ubicacion', 'unidad', 'custodio', 'contrato_oc']) {
         if (!filaObj[campo]?.trim()) errores.push(`Falta el campo obligatorio ${campo}.`);
       }
+      if (filaObj.unidad && !CATALOGOS.unidades.includes(filaObj.unidad)) {
+        errores.push(`Unidad '${filaObj.unidad}' no permitida. Elige una unidad del catálogo municipal.`);
+      }
       if (filaObj.estado_operativo && !CATALOGOS.estados_operativos.includes(filaObj.estado_operativo)) {
         errores.push(`Estado '${filaObj.estado_operativo}' no permitido.`);
       }
@@ -263,6 +232,36 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
       }
       if (filaObj.tipo_mantenimiento && !CATALOGOS.tipos_mantenimiento.includes(filaObj.tipo_mantenimiento)) {
         errores.push(`Tipo de mantenimiento '${filaObj.tipo_mantenimiento}' no permitido.`);
+      }
+      for (const campo of ['fecha_adquisicion', 'fecha_garantia', 'ultimo_mantenimiento']) {
+        if (filaObj[campo] && !fechaISOValida(filaObj[campo])) {
+          errores.push(`${campo} debe tener formato válido AAAA-MM-DD.`);
+        }
+      }
+      if (
+        fechaISOValida(filaObj.fecha_adquisicion || '') &&
+        fechaISOValida(filaObj.fecha_garantia || '') &&
+        filaObj.fecha_garantia < filaObj.fecha_adquisicion
+      ) {
+        errores.push('La fecha de garantía no puede ser anterior a la fecha de adquisición.');
+      }
+      const hoyChile = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+      if (fechaISOValida(filaObj.fecha_adquisicion || '') && filaObj.fecha_adquisicion > hoyChile) {
+        errores.push('La fecha de adquisición no puede estar en el futuro.');
+      }
+      if (fechaISOValida(filaObj.ultimo_mantenimiento || '') && filaObj.ultimo_mantenimiento > hoyChile) {
+        errores.push('La fecha del último mantenimiento no puede estar en el futuro.');
+      }
+      if (
+        filaObj.estado_operativo === 'De baja' &&
+        !String(filaObj.motivo_baja || '').trim()
+      ) {
+        errores.push("Si el estado es 'De baja', debes completar el motivo_baja.");
+      }
+      for (const campo of ['costo_inicial', 'costo_anual']) {
+        if (!costoValido(filaObj[campo] || '')) {
+          errores.push(`${campo} debe ser un número igual o mayor que cero.`);
+        }
       }
 
       const esValida = errores.length === 0;
@@ -288,11 +287,34 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
     const file = e.target.files[0];
     if (!file) return;
 
+    setErrorGlobal(null);
+    setFileName('');
+    setFilasAnalizadas([]);
+    setResumen(null);
+    setResultadoFinal(null);
+    setRecepcionVerificada(false);
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setErrorGlobal('Selecciona un archivo CSV válido (.csv).');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > tamanoMaximoArchivo) {
+      setErrorGlobal('El archivo supera el límite de 10 MB. Divide la planilla en archivos más pequeños.');
+      e.target.value = '';
+      return;
+    }
+
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (event) => {
       const contenido = String(event.target.result || '');
       analizarCSV(contenido);
+    };
+    reader.onerror = () => {
+      setErrorGlobal('No se pudo leer el archivo. Comprueba que no esté dañado e inténtalo otra vez.');
+      setFileName('');
+      setFilasAnalizadas([]);
+      setResumen(null);
     };
     reader.readAsText(file);
   };
@@ -326,9 +348,6 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
         conError: res.data.resumen.con_error
       });
       setTabFiltro(res.data.resumen.con_error > 0 ? 'errores' : 'todas');
-      if (res.data.resumen.validas > 0 && onActivosImportados) {
-        onActivosImportados();
-      }
     } catch (err) {
       setErrorGlobal(err.message || 'Error durante el procesamiento masivo.');
     } finally {
@@ -379,14 +398,7 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
             <FileSpreadsheet size={18} />
             <span>Paso 1: Seleccionar o Arrastrar Archivo CSV</span>
           </div>
-          <button 
-            type="button" 
-            className="btn btn-secondary btn-sm"
-            onClick={handleLoadSampleData}
-            disabled={!isAdmin}
-          >
-            Cargar Lote de Prueba Rápido
-          </button>
+          <span className="form-helper">Carga únicamente los datos reales del inventario autorizado.</span>
         </div>
 
         <div style={{
@@ -414,10 +426,10 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
           />
           <FileUp size={42} style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
           <h4 style={{ fontSize: '1.05rem', color: '#1e293b', fontWeight: 700 }}>
-            {fileName ? `Archivo cargado: ${fileName}` : 'Haz clic o arrastra aquí tu archivo CSV'}
+            {fileName ? `Archivo cargado: ${fileName}` : 'Haz clic aquí para seleccionar tu archivo CSV'}
           </h4>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Delimitado por punto y coma (;) o comas (,). Codificación UTF-8 estándar.
+            Archivo CSV de hasta 10 MB, en UTF-8. Se aceptan columnas separadas por punto y coma (;) o coma (,).
           </p>
         </div>
 
@@ -495,6 +507,16 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
                 <p style={{ marginTop: 4 }}>
                   Se insertaron <strong>{resultadoFinal.resumen.validas} activos</strong> y {resultadoFinal.resumen.con_error} filas tuvieron errores. Las filas aceptadas quedaron registradas en la bitácora.
                 </p>
+                {resultadoFinal.resumen.validas > 0 && onActivosImportados && (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    style={{ marginTop: 10 }}
+                    onClick={onActivosImportados}
+                  >
+                    Ver inventario actualizado
+                  </button>
+                )}
               </div>
             </div>
           )}

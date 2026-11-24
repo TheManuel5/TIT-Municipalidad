@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, ClipboardCheck, RefreshCw, ShieldAlert } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
 
 const CAMPOS_FISICOS = [
   { campo: 'id_activo', label: 'ID observado' },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { ArrowRightLeft, AlertCircle } from 'lucide-react';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
 
 export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
   const [nuevaUnidad, setNuevaUnidad] = useState('');
@@ -27,8 +27,8 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
     e.preventDefault();
     setError('');
 
-    if (!nuevaUnidad || !nuevaUbicacion || !nuevoCustodio) {
-      setError('Por favor complete todos los datos de asignación.');
+    if (!nuevaUnidad || !nuevaUbicacion.trim() || !nuevoCustodio.trim()) {
+      setError('Completa unidad, ubicación y nombre del nuevo custodio. No dejes estos campos vacíos.');
       return;
     }
 
@@ -41,9 +41,9 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
     try {
       await onConfirm({
         nueva_unidad: nuevaUnidad,
-        nueva_ubicacion: nuevaUbicacion,
-        nuevoCustodio: nuevoCustodio,
-        nuevo_custodio: nuevoCustodio,
+        nueva_ubicacion: nuevaUbicacion.trim(),
+        nuevoCustodio: nuevoCustodio.trim(),
+        nuevo_custodio: nuevoCustodio.trim(),
         motivo: motivo.trim(),
         detalles: detalles.trim()
       });
@@ -102,6 +102,7 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
               value={nuevaUbicacion}
               onChange={(e) => setNuevaUbicacion(e.target.value)}
               placeholder="Ej: DIDECO - Equipo Territorial Quilacahuín"
+              maxLength={200}
               required
             />
           </div>
@@ -114,6 +115,7 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
               value={nuevoCustodio}
               onChange={(e) => setNuevoCustodio(e.target.value)}
               placeholder="Ej: Marcela Huenchumán Soto"
+              maxLength={200}
               required
             />
           </div>
@@ -126,6 +128,7 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
               placeholder="Justificación formal de la reasignación (requerida por auditoría Ley 21.459)..."
+              maxLength={1000}
               required
             />
           </div>

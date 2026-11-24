@@ -1,11 +1,10 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RoleBadge } from './Badge';
-import { LogOut, User, Shield, RefreshCw, Menu } from 'lucide-react';
-import { isMockMode } from '../api';
+import { LogOut, Menu } from 'lucide-react';
 
 export function Navbar({ onToggleSidebar }) {
-  const { user, logout, switchUser, testUsers } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <header className="top-header">
@@ -20,17 +19,17 @@ export function Navbar({ onToggleSidebar }) {
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span 
-            className="badge" 
-            style={{ 
-              backgroundColor: isMockMode ? '#eff6ff' : '#ecfdf5', 
-              color: isMockMode ? '#1d4ed8' : '#047857',
-              border: `1px solid ${isMockMode ? '#bfdbfe' : '#a7f3d0'}`,
+          <span
+            className="badge"
+            style={{
+              backgroundColor: '#ecfdf5',
+              color: '#047857',
+              border: '1px solid #a7f3d0',
               fontWeight: 600,
               fontSize: '0.72rem'
             }}
           >
-            {isMockMode ? '● Modo Simulado (Mock)' : '● API Real Conectada'}
+            API real · sin datos simulados
           </span>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
             Plan Informático Municipal 2027–2031
@@ -39,26 +38,6 @@ export function Navbar({ onToggleSidebar }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        {/* Selector de Usuario para demostración en vivo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Shield size={15} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-            Simular rol:
-          </span>
-          <select 
-            className="form-select" 
-            style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}
-            value={user?.username || ''}
-            onChange={(e) => switchUser(e.target.value)}
-          >
-            {testUsers.map((u) => (
-              <option key={u.username} value={u.username}>
-                {u.rol === 'admin_ti' ? '⚙️ Admin TI' : (u.rol === 'jefatura' ? '🏢 Jefatura DIDECO' : '👁️ Auditoria Control')} ({u.username})
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* Info del usuario logueado */}
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
