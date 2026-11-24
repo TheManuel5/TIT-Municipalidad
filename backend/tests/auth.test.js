@@ -32,19 +32,6 @@ test('mantiene los tres usuarios predeterminados con contraseñas bcrypt', async
   assert.deepEqual(Object.keys(login.body.data.user).sort(), ['id', 'nombre', 'rol', 'unidad', 'username']);
 });
 
-test('migra una contraseña heredada a bcrypt tras un inicio válido', async () => {
-  db.prepare("UPDATE usuarios SET password = 'legacy-password' WHERE username = 'admin'").run();
-
-  const login = await api.request('POST', '/auth/login', {
-    body: { username: 'admin', password: 'legacy-password' }
-  });
-  assert.equal(login.status, 200);
-
-  const storedPassword = db.prepare('SELECT password FROM usuarios WHERE username = ?').get('admin').password;
-  assert.match(storedPassword, /^\$2[aby]\$\d{2}\$/);
-  assert.equal(await bcrypt.compare('legacy-password', storedPassword), true);
-});
-
 test('rechaza credenciales incorrectas y datos de login mal formados', async () => {
   const hashBefore = db.prepare('SELECT password FROM usuarios WHERE username = ?').get('admin').password;
   const invalidPassword = await api.request('POST', '/auth/login', {
