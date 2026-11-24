@@ -1,13 +1,14 @@
 /**
  * api.mock.js - Simulación completa del Contrato de API REST
  * Municipalidad de San Pablo - Plan Informático Municipal 2027-2031 (Proyecto A)
- * Cumple con los 13 endpoints definidos en docs/contrato-api.md
+ * Cumple con los endpoints definidos en docs/contrato-api.md
  * Datos iniciales: 106 activos del informe (64 PC, 18 Impresoras, 14 Red, 2 Servidores, 8 Apps)
  */
 
 const STORAGE_KEY_ACTIVOS = 'san_pablo_activos_v1';
 const STORAGE_KEY_HISTORIAL = 'san_pablo_historial_v1';
 const STORAGE_KEY_AUTH = 'san_pablo_auth_user_v1';
+const STORAGE_KEY_CONCILIACIONES = 'san_pablo_conciliaciones_v1';
 
 // Catálogos institucionales
 export const CATALOGOS = {
@@ -390,7 +391,7 @@ function generarSeedHistorial() {
       id: 1,
       id_activo: 'SP-HW-0003',
       fecha: '2025-01-15T10:00:00Z',
-      tipo_evento: 'ALTA',
+      tipo_evento: 'IMPORTACION',
       usuario: 'Felipe Oyarzún Mansilla',
       unidad_origen: null,
       unidad_destino: 'DIDECO',
@@ -438,6 +439,9 @@ function initStorage() {
     const inicialesH = generarSeedHistorial();
     localStorage.setItem(STORAGE_KEY_HISTORIAL, JSON.stringify(inicialesH));
   }
+  if (!localStorage.getItem(STORAGE_KEY_CONCILIACIONES)) {
+    localStorage.setItem(STORAGE_KEY_CONCILIACIONES, JSON.stringify([]));
+  }
 }
 
 // Helpers
@@ -465,6 +469,19 @@ function getStoredHistorial() {
 
 function saveStoredHistorial(historial) {
   localStorage.setItem(STORAGE_KEY_HISTORIAL, JSON.stringify(historial));
+}
+
+function getStoredConciliaciones() {
+  initStorage();
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY_CONCILIACIONES) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveStoredConciliaciones(conciliaciones) {
+  localStorage.setItem(STORAGE_KEY_CONCILIACIONES, JSON.stringify(conciliaciones));
 }
 
 function getSessionUser() {
@@ -634,9 +651,8 @@ export const apiMock = {
     await delay();
     const lista = getStoredActivos();
     const currentUser = getSessionUser();
-    const hoy = new Date();
-    const limite = new Date();
-    limite.setDate(hoy.getDate() + Number(dias));
+    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+    const hoyMs = Date.parse(`${hoy}T00:00:00Z`);
 
     let accesibles = lista;
     if (currentUser.rol === 'jefatura') {
@@ -650,9 +666,9 @@ export const apiMock = {
       if (a.estado_operativo === 'De baja') return;
 
       if (a.fecha_garantia) {
-        const fechaG = new Date(a.fecha_garantia);
-        const diffDias = Math.ceil((fechaG - hoy) / (1000 * 60 * 60 * 24));
-        if (diffDias <= Number(dias) && diffDias >= -365) {
+        const fechaMs = Date.parse(`${a.fecha_garantia}T00:00:00Z`);
+        const diffDias = Math.round((fechaMs - hoyMs) / (1000 * 60 * 60 * 24));
+        if (diffDias >= 0 && diffDias <= Number(dias)) {
           if (a.categoria === 'Software') {
             licenciasPorVencer.push({
               id_activo: a.id_activo,
@@ -706,8 +722,19 @@ export const apiMock = {
       throw err;
     }
 
+    if (payload.recepcion_verificada !== true) {
+      const err = new Error('Confirme la verificación física y documental de la recepción antes de registrar el activo.');
+      err.status = 400;
+      throw err;
+    }
+
     if (!payload.id_activo || !payload.id_activo.trim()) {
       const err = new Error('El ID de activo es obligatorio.');
+      err.status = 400;
+      throw err;
+    }
+    if (!String(payload.contrato_oc || '').trim()) {
+      const err = new Error('La orden de compra o contrato es obligatoria para documentar la recepción.');
       err.status = 400;
       throw err;
     }
@@ -720,8 +747,10 @@ export const apiMock = {
       throw err;
     }
 
+    const datosActivo = { ...payload };
+    delete datosActivo.recepcion_verificada;
     const nuevo = {
-      ...payload,
+      ...datosActivo,
       id_activo: idNormalizado,
       costo_inicial: Number(payload.costo_inicial) || 0,
       costo_anual: Number(payload.costo_anual) || 0,
@@ -746,7 +775,7 @@ export const apiMock = {
       custodio_anterior: null,
       custodio_nuevo: nuevo.custodio,
       motivo: `Alta inicial en sistema bajo OC ${nuevo.contrato_oc || 'Directa'}`,
-      detalles: `Incorporación a inventario oficial de la Municipalidad de San Pablo.`
+      detalles: `Recepción física y documental verificada por ${currentUser.nombre} antes del alta; documento: ${nuevo.contrato_oc || 'Sin OC registrada'}.`
     });
     saveStoredHistorial(historial);
 
@@ -955,14 +984,21 @@ export const apiMock = {
       operativos: lista.filter((a) => a.estado_operativo === 'Bueno' || a.estado_operativo === 'Regular').length,
       en_reparacion: lista.filter((a) => a.estado_operativo === 'En reparación').length,
       de_baja: lista.filter((a) => a.estado_operativo === 'De baja').length,
-      alertas_garantia: 0
+      alertas_garantia: 0,
+      activos_validados: lista.filter((a) =>
+        Boolean(a.custodio?.trim() && a.estado_operativo?.trim() && a.fecha_revision?.trim() && a.responsable_revision?.trim())
+      ).length
     };
+    totales.porcentaje_activos_validados = totales.total_activos
+      ? Math.round((totales.activos_validados / totales.total_activos) * 100)
+      : 0;
 
-    const hoy = new Date();
+    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+    const hoyMs = Date.parse(`${hoy}T00:00:00Z`);
     totales.alertas_garantia = lista.filter((a) => {
-      if (a.estado_operativo === 'De baja' || !a.fecha_garantia) return false;
-      const diff = Math.ceil((new Date(a.fecha_garantia) - hoy) / (1000 * 60 * 60 * 24));
-      return diff <= 60;
+      if (a.estado_operativo === 'De baja' || a.categoria === 'Software' || !a.fecha_garantia) return false;
+      const diff = Math.round((Date.parse(`${a.fecha_garantia}T00:00:00Z`) - hoyMs) / (1000 * 60 * 60 * 24));
+      return diff >= 0 && diff <= 60;
     }).length;
 
     // Conteo por categoría
@@ -1016,6 +1052,7 @@ export const apiMock = {
     let inversion_total_inicial = 0;
     let costo_anual_recurrente_total = 0;
     const catCostos = {};
+    const unidadCostos = {};
 
     CATALOGOS.categorias.forEach((c) => {
       catCostos[c] = { categoria: c, inversion_inicial: 0, costo_anual: 0, cantidad: 0 };
@@ -1033,6 +1070,13 @@ export const apiMock = {
       catCostos[a.categoria].inversion_inicial += ini;
       catCostos[a.categoria].costo_anual += rec;
       catCostos[a.categoria].cantidad += 1;
+
+      if (!unidadCostos[a.unidad]) {
+        unidadCostos[a.unidad] = { unidad: a.unidad, inversion_inicial: 0, costo_anual: 0, cantidad: 0 };
+      }
+      unidadCostos[a.unidad].inversion_inicial += ini;
+      unidadCostos[a.unidad].costo_anual += rec;
+      unidadCostos[a.unidad].cantidad += 1;
     });
 
     const tco_estimado_5_anos = inversion_total_inicial + costo_anual_recurrente_total * 5;
@@ -1043,18 +1087,200 @@ export const apiMock = {
         inversion_total_inicial,
         costo_anual_recurrente_total,
         tco_estimado_5_anos,
-        desglose_por_categoria: Object.values(catCostos).sort((a, b) => b.inversion_inicial - a.inversion_inicial)
+        desglose_por_categoria: Object.values(catCostos).sort((a, b) => b.inversion_inicial - a.inversion_inicial),
+        desglose_por_unidad: Object.values(unidadCostos).sort((a, b) => b.inversion_inicial - a.inversion_inicial)
       }
     };
   },
 
+  // GET /api/reportes/garantias?dias=90
+  async getReporteGarantias(dias = 90) {
+    return await this.getAlertas(dias);
+  },
+
+  async getConciliaciones() {
+    await delay();
+    const user = getSessionUser();
+    if (!['admin_ti', 'lectura'].includes(user.rol)) {
+      const err = new Error('La conciliación física está disponible para Admin TI y Auditoría.');
+      err.status = 403;
+      throw err;
+    }
+    return {
+      success: true,
+      data: getStoredConciliaciones().map(({ activos, ...sesion }) => sesion)
+    };
+  },
+
+  async getConciliacion(id) {
+    await delay();
+    const user = getSessionUser();
+    if (!['admin_ti', 'lectura'].includes(user.rol)) {
+      const err = new Error('La conciliación física está disponible para Admin TI y Auditoría.');
+      err.status = 403;
+      throw err;
+    }
+    const sesion = getStoredConciliaciones().find((item) => String(item.id) === String(id));
+    if (!sesion) {
+      const err = new Error('No se encontró la conciliación solicitada.');
+      err.status = 404;
+      throw err;
+    }
+    return { success: true, data: sesion };
+  },
+
+  async crearConciliacion() {
+    await delay();
+    const user = getSessionUser();
+    if (user.rol !== 'admin_ti') {
+      const err = new Error('Solo Admin TI puede iniciar una conciliación física.');
+      err.status = 403;
+      throw err;
+    }
+
+    const activosVigentes = getStoredActivos().filter((activo) => activo.estado_operativo !== 'De baja');
+    if (activosVigentes.length === 0) {
+      const err = new Error('No hay activos vigentes para iniciar una conciliación física.');
+      err.status = 400;
+      throw err;
+    }
+    for (let i = activosVigentes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [activosVigentes[i], activosVigentes[j]] = [activosVigentes[j], activosVigentes[i]];
+    }
+    const tamanoMuestra = Math.max(1, Math.ceil(activosVigentes.length * 0.1));
+    const sesion = {
+      id: Date.now(),
+      fecha_inicio: new Date().toISOString(),
+      fecha_cierre: null,
+      usuario: user.nombre,
+      total_activos: activosVigentes.length,
+      tamano_muestra: tamanoMuestra,
+      inspeccionados: 0,
+      discrepancias: 0,
+      porcentaje_discrepancias: 0,
+      resultado: 'En curso',
+      activos: activosVigentes.slice(0, tamanoMuestra).map((activo) => ({
+        id_activo: activo.id_activo,
+        datos_registrados: {
+          id_activo: activo.id_activo,
+          ubicacion: activo.ubicacion,
+          unidad: activo.unidad,
+          custodio: activo.custodio,
+          estado_operativo: activo.estado_operativo
+        },
+        datos_observados: null,
+        encontrado: null,
+        resultado: 'Pendiente',
+        detalle: null,
+        fecha_verificacion: null,
+        usuario_verificacion: null
+      }))
+    };
+    const sesiones = getStoredConciliaciones();
+    sesiones.unshift(sesion);
+    saveStoredConciliaciones(sesiones);
+    return { success: true, data: sesion };
+  },
+
+  async registrarInspeccion(conciliacionId, idActivo, datos) {
+    await delay();
+    const user = getSessionUser();
+    if (user.rol !== 'admin_ti') {
+      const err = new Error('Solo Admin TI puede registrar inspecciones físicas.');
+      err.status = 403;
+      throw err;
+    }
+
+    const sesiones = getStoredConciliaciones();
+    const sesion = sesiones.find((item) => String(item.id) === String(conciliacionId));
+    if (!sesion) {
+      const err = new Error('No se encontró la conciliación solicitada.');
+      err.status = 404;
+      throw err;
+    }
+    if (sesion.resultado !== 'En curso') {
+      const err = new Error('La conciliación ya está cerrada y no admite nuevas inspecciones.');
+      err.status = 409;
+      throw err;
+    }
+    const activo = sesion.activos.find((item) => item.id_activo === idActivo);
+    if (!activo) {
+      const err = new Error('El activo no pertenece a la muestra de esta conciliación.');
+      err.status = 404;
+      throw err;
+    }
+    if (activo.resultado !== 'Pendiente') {
+      const err = new Error('La inspección de este activo ya fue registrada.');
+      err.status = 409;
+      throw err;
+    }
+    if (typeof datos?.encontrado !== 'boolean') {
+      const err = new Error('Indique si el activo fue encontrado físicamente.');
+      err.status = 400;
+      throw err;
+    }
+
+    const campos = ['id_activo', 'ubicacion', 'unidad', 'custodio', 'estado_operativo'];
+    const observados = {};
+    if (datos.encontrado) {
+      for (const campo of campos) {
+        const valor = datos[`${campo}_observado`];
+        if (typeof valor !== 'string' || !valor.trim()) {
+          const err = new Error(`El campo ${campo}_observado es obligatorio para un activo encontrado.`);
+          err.status = 400;
+          throw err;
+        }
+        observados[campo] = valor.trim();
+      }
+      if (!CATALOGOS.estados_operativos.includes(observados.estado_operativo)) {
+        const err = new Error('El estado operativo observado no es válido.');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    const normalizar = (valor) => String(valor ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es-CL');
+    const discrepancia = !datos.encontrado || campos.some((campo) =>
+      normalizar(activo.datos_registrados[campo]) !== normalizar(observados[campo])
+    );
+    const detalle = String(datos.detalle || '').trim();
+    if (discrepancia && !detalle) {
+      const err = new Error('Describa la discrepancia observada antes de guardar.');
+      err.status = 400;
+      throw err;
+    }
+
+    activo.encontrado = datos.encontrado;
+    activo.datos_observados = datos.encontrado ? observados : null;
+    activo.resultado = discrepancia ? 'Discrepancia' : 'Coincide';
+    activo.detalle = detalle || null;
+    activo.fecha_verificacion = new Date().toISOString();
+    activo.usuario_verificacion = user.nombre;
+    sesion.inspeccionados = sesion.activos.filter((item) => item.resultado !== 'Pendiente').length;
+    sesion.discrepancias = sesion.activos.filter((item) => item.resultado === 'Discrepancia').length;
+    sesion.porcentaje_discrepancias = Math.round((sesion.discrepancias / sesion.inspeccionados) * 10000) / 100;
+    if (sesion.inspeccionados === sesion.tamano_muestra) {
+      sesion.fecha_cierre = activo.fecha_verificacion;
+      sesion.resultado = sesion.porcentaje_discrepancias <= 5 ? 'Cumple' : 'No cumple';
+    }
+    saveStoredConciliaciones(sesiones);
+    return { success: true, data: sesion };
+  },
+
   // 13. POST /api/importar (CSV)
-  async importarCSV(filasValidadas) {
+  async importarCSV(filasValidadas, recepcionVerificada = false) {
     await delay(350);
     const currentUser = getSessionUser();
     if (currentUser.rol !== 'admin_ti') {
       const err = new Error('Solo admin_ti tiene privilegios para importar activos masivamente.');
       err.status = 403;
+      throw err;
+    }
+
+    if (recepcionVerificada !== true) {
+      const err = new Error('Confirme la verificación física y documental del lote antes de registrar su recepción.');
+      err.status = 400;
       throw err;
     }
 
@@ -1085,6 +1311,11 @@ export const apiMock = {
           id_activo: idActivo,
           error: `Categoría '${fila.categoria}' inválida. Debe ser una de: ${CATALOGOS.categorias.join(', ')}`
         });
+        return;
+      }
+
+      if (!String(fila.contrato_oc || '').trim()) {
+        conError.push({ fila: numFila, id_activo: idActivo, error: 'Falta el campo obligatorio contrato_oc para documentar la recepción.' });
         return;
       }
 
@@ -1130,7 +1361,7 @@ export const apiMock = {
         custodio_anterior: null,
         custodio_nuevo: nuevoActivo.custodio,
         motivo: 'Importación masiva vía archivo CSV',
-        detalles: `Fila ${numFila} procesada conforme al contrato API.`
+        detalles: `Fila ${numFila}: control de recepción física y documental confirmado; documento: ${nuevoActivo.contrato_oc}.`
       });
     });
 

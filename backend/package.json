@@ -8,7 +8,7 @@
     "dev": "node --watch server.js",
     "seed": "node ../db/seed.js",
     "seed:reset": "node ../db/seed.js --reset",
-    "test": "node --test tests/db.test.js tests/consultas.test.js"
+    "test": "node --test tests/db.test.js tests/consultas.test.js tests/reportes-importar.test.js tests/conciliaciones.test.js"
   },
   "keywords": [],
   "author": "",

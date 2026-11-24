@@ -23,7 +23,7 @@ El documento canónico para todo el equipo es:
 👉 **[`docs/contrato-api.md`](docs/contrato-api.md)**
 
 Contiene:
-1. **Los 13 Endpoints oficiales:** especificaciones HTTP, parámetros query, payload y códigos de estado.
+1. **Los 19 Endpoints oficiales:** especificaciones HTTP, parámetros query, payload y códigos de estado.
 2. **Nombres canónicos de los campos de la base de datos:** correspondientes a la **Tabla 7** (*Estructura del modelo de inventario tecnológico y criterios de reserva*) del Informe del Plan Informático.
 3. **JSON de ejemplo** para cada respuesta de la API.
 4. **Matriz de Seguridad y Roles:**
@@ -64,6 +64,16 @@ En la pantalla de Login y en la barra superior se incluye un selector rápido de
 2. **Jefatura de Unidad:** `jefe_dideco` / `password123` (Rol: `jefatura`, Unidad: `DIDECO`)
 3. **Auditoría / Control:** `auditor` / `password123` (Rol: `lectura`, Unidad: `Control`)
 
+### 5. Preparar la base de datos después de actualizar el esquema
+
+Después de hacer `git pull` cuando cambie el esquema de SQLite, desde `backend/` ejecuta:
+
+```bash
+npm run seed:reset
+```
+
+Este comando elimina y vuelve a crear `db/inventario.db` con el esquema y datos iniciales. Exporta o respalda primero cualquier dato local que quieras conservar.
+
 ---
 
 ## 🖥️ Pantallas del Frontend
@@ -78,4 +88,6 @@ En la pantalla de Login y en la barra superior se incluye un selector rápido de
    - **Modal de Baja:** justificación legal y técnica **estrictamente obligatoria** (Ley N.º 18.695).
 7. **Reportes y Métricas:** pestañas de Resumen General, Análisis Financiero de Costos y TCO a 5 años, y Auditoría de Vigencia de Garantías.
 8. **Importación Masiva (CSV):** arrastre de archivo CSV, descarga de plantilla estándar, carga de lote de prueba rápido, análisis fila por fila con discriminación entre filas válidas y erróneas, y procesamiento masivo con registro automático en bitácora.
-9. **Visor del Contrato API:** pantalla integrada con la especificación de los 13 endpoints para referencia en vivo.
+9. **Conciliación Física:** muestra aleatoria del 10% de activos vigentes, captura de diferencias y aceptación con un máximo de 5% de discrepancias.
+10. **Control de recepción:** las altas e importaciones exigen confirmar la recepción física/documental y registrar la orden de compra o contrato.
+11. **Visor del Contrato API:** pantalla integrada con la especificación de los 19 endpoints para referencia en vivo.

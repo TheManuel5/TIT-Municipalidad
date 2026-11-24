@@ -19,11 +19,72 @@ import {
 } from 'lucide-react';
 import { CATALOGOS } from '../api.mock.js';
 
+function detectarSeparador(texto) {
+  let enComillas = false;
+  let comas = 0;
+  let puntosYComa = 0;
+
+  for (let i = 0; i < texto.length; i++) {
+    const caracter = texto[i];
+    if (caracter === '"') {
+      if (enComillas && texto[i + 1] === '"') i++;
+      else enComillas = !enComillas;
+    } else if (!enComillas && (caracter === '\n' || caracter === '\r')) {
+      break;
+    } else if (!enComillas && caracter === ',') {
+      comas++;
+    } else if (!enComillas && caracter === ';') {
+      puntosYComa++;
+    }
+  }
+
+  return puntosYComa > comas ? ';' : ',';
+}
+
+function parsearCSV(texto) {
+  const separador = detectarSeparador(texto);
+  const registros = [];
+  let registro = [];
+  let campo = '';
+  let enComillas = false;
+
+  for (let i = 0; i < texto.length; i++) {
+    const caracter = texto[i];
+    if (enComillas) {
+      if (caracter === '"' && texto[i + 1] === '"') {
+        campo += '"';
+        i++;
+      } else if (caracter === '"') {
+        enComillas = false;
+      } else {
+        campo += caracter;
+      }
+    } else if (caracter === '"' && !campo.trim()) {
+      enComillas = true;
+    } else if (caracter === separador) {
+      registro.push(campo.trim());
+      campo = '';
+    } else if (caracter === '\n' || caracter === '\r') {
+      if (caracter === '\r' && texto[i + 1] === '\n') i++;
+      registro.push(campo.trim());
+      if (registro.some((valor) => valor !== '')) registros.push(registro);
+      registro = [];
+      campo = '';
+    } else {
+      campo += caracter;
+    }
+  }
+
+  if (enComillas) throw new Error('El CSV contiene un campo entre comillas sin cerrar.');
+  registro.push(campo.trim());
+  if (registro.some((valor) => valor !== '')) registros.push(registro);
+  return registros;
+}
+
 export function ImportarScreen({ onActivosImportados }) {
   const { user } = useAuth();
   const isAdmin = user?.rol === 'admin_ti';
 
-  const [csvContent, setCsvContent] = useState('');
   const [fileName, setFileName] = useState('');
   const [filasAnalizadas, setFilasAnalizadas] = useState([]);
   const [resumen, setResumen] = useState(null);
@@ -31,6 +92,7 @@ export function ImportarScreen({ onActivosImportados }) {
   const [resultadoFinal, setResultadoFinal] = useState(null);
   const [errorGlobal, setErrorGlobal] = useState(null);
   const [tabFiltro, setTabFiltro] = useState('todas'); // 'todas' | 'validas' | 'errores'
+  const [recepcionVerificada, setRecepcionVerificada] = useState(false);
 
   // Descargar plantilla CSV de ejemplo
   const handleDownloadPlantilla = () => {
@@ -116,16 +178,15 @@ export function ImportarScreen({ onActivosImportados }) {
 
   // Cargar datos de prueba
   const handleLoadSampleData = () => {
-    const dataEjemplo = `id_activo;categoria;marca_modelo;descripcion;ubicacion;unidad;custodio;estado_operativo;costo_inicial;costo_anual;criticidad
-SP-HW-1001;Portátil;Dell Latitude 3420;Intel i5 11va Gen 16GB RAM;DIDECO - San Pablo Central;DIDECO;Marcela Huenchumán;Bueno;690000;0;Alta
-SP-HW-1002;PC;HP ProDesk 400 G7;Desktop SFF i5 16GB;DAF - Tesorería;DAF;Patricia Navarro;Bueno;610000;0;Media
-SP-PRN-1003;Impresora;HP LaserJet Pro 4003dn;Impresora láser monocromática;DOM - Obras;DOM;Rodrigo Alarcón;Bueno;280000;30000;Media
-SP-NET-1004;Red;Switch TP-Link 24P;Switch no administrable de soporte;Salud - Consultorio;Salud;Mónica Cárdenas;Bueno;140000;10000;Baja
-SP-HW-0001;PC;Equipo Duplicado Test;Debe dar error por ID existente;Secretaría Municipal;Secretaría Municipal;Carolina Muñoz;Bueno;500000;0;Baja
-SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validación;Informática;Informática;Felipe Oyarzún;Bueno;400000;0;Media`;
+    const dataEjemplo = `id_activo;categoria;marca_modelo;descripcion;ubicacion;unidad;custodio;estado_operativo;costo_inicial;costo_anual;criticidad;contrato_oc
+SP-HW-1001;Portátil;Dell Latitude 3420;Intel i5 11va Gen 16GB RAM;DIDECO - San Pablo Central;DIDECO;Marcela Huenchumán;Bueno;690000;0;Alta;OC 4521-99-SE26
+SP-HW-1002;PC;HP ProDesk 400 G7;Desktop SFF i5 16GB;DAF - Tesorería;DAF;Patricia Navarro;Bueno;610000;0;Media;OC 4521-99-SE26
+SP-PRN-1003;Impresora;HP LaserJet Pro 4003dn;Impresora láser monocromática;DOM - Obras;DOM;Rodrigo Alarcón;Bueno;280000;30000;Media;OC 4521-99-SE26
+SP-NET-1004;Red;Switch TP-Link 24P;Switch no administrable de soporte;Salud - Consultorio;Salud;Mónica Cárdenas;Bueno;140000;10000;Baja;OC 4521-99-SE26
+SP-HW-0001;PC;Equipo Duplicado Test;Debe dar error por ID existente;Secretaría Municipal;Secretaría Municipal;Carolina Muñoz;Bueno;500000;0;Baja;OC 4521-99-SE26
+SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validación;Informática;Informática;Felipe Oyarzún;Bueno;400000;0;Media;OC 4521-99-SE26`;
 
     setFileName('ejemplo_prueba_rapida.csv');
-    setCsvContent(dataEjemplo);
     analizarCSV(dataEjemplo);
   };
 
@@ -133,26 +194,36 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
   const analizarCSV = (texto) => {
     setErrorGlobal(null);
     setResultadoFinal(null);
+    setRecepcionVerificada(false);
 
-    const lineas = texto.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    if (lineas.length <= 1) {
+    let registros;
+    try {
+      registros = parsearCSV(texto);
+    } catch (err) {
+      setErrorGlobal(err.message);
+      setFilasAnalizadas([]);
+      setResumen(null);
+      return;
+    }
+
+    if (registros.length <= 1) {
       setErrorGlobal('El archivo CSV está vacío o solo contiene la cabecera.');
       setFilasAnalizadas([]);
       setResumen(null);
       return;
     }
 
-    const separador = lineas[0].includes(';') ? ';' : ',';
-    const headers = lineas[0].split(separador).map((h) => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+    const headers = registros[0].map((h, index) =>
+      (index === 0 ? h.replace(/^\uFEFF/, '') : h).trim().toLowerCase()
+    );
 
     const filas = [];
+    const idsVistos = new Set();
     let validas = 0;
     let conError = 0;
 
-    for (let i = 1; i < lineas.length; i++) {
-      const lineaTexto = lineas[i];
-      const valores = lineaTexto.split(separador).map((v) => v.trim().replace(/^["']|["']$/g, ''));
-      
+    for (let i = 1; i < registros.length; i++) {
+      const valores = registros[i];
       const filaObj = {};
       headers.forEach((h, idx) => {
         filaObj[h] = valores[idx] || '';
@@ -160,11 +231,16 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
 
       const errores = [];
       const idActivo = (filaObj.id_activo || '').trim().toUpperCase();
+      if (valores.length > headers.length) {
+        errores.push('La fila contiene más valores que columnas en la cabecera.');
+      }
 
       if (!idActivo) {
         errores.push('Falta el ID del activo (id_activo).');
-      } else if (idActivo === 'SP-HW-0001' || idActivo === 'SP-HW-0042') {
-        errores.push(`ID '${idActivo}' ya existe en el inventario institucional.`);
+      } else if (idsVistos.has(idActivo)) {
+        errores.push(`ID '${idActivo}' está duplicado en el archivo.`);
+      } else {
+        idsVistos.add(idActivo);
       }
 
       if (!filaObj.categoria) {
@@ -175,6 +251,18 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
 
       if (!filaObj.marca_modelo) {
         errores.push('Falta la marca y modelo.');
+      }
+      for (const campo of ['ubicacion', 'unidad', 'custodio', 'contrato_oc']) {
+        if (!filaObj[campo]?.trim()) errores.push(`Falta el campo obligatorio ${campo}.`);
+      }
+      if (filaObj.estado_operativo && !CATALOGOS.estados_operativos.includes(filaObj.estado_operativo)) {
+        errores.push(`Estado '${filaObj.estado_operativo}' no permitido.`);
+      }
+      if (filaObj.criticidad && !CATALOGOS.criticidades.includes(filaObj.criticidad)) {
+        errores.push(`Criticidad '${filaObj.criticidad}' no permitida.`);
+      }
+      if (filaObj.tipo_mantenimiento && !CATALOGOS.tipos_mantenimiento.includes(filaObj.tipo_mantenimiento)) {
+        errores.push(`Tipo de mantenimiento '${filaObj.tipo_mantenimiento}' no permitido.`);
       }
 
       const esValida = errores.length === 0;
@@ -203,8 +291,7 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (event) => {
-      const contenido = event.target.result;
-      setCsvContent(contenido);
+      const contenido = String(event.target.result || '');
       analizarCSV(contenido);
     };
     reader.readAsText(file);
@@ -212,17 +299,34 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
 
   const handleProcesarImportacion = async () => {
     if (!resumen || resumen.validas === 0) return;
+    if (!recepcionVerificada) {
+      setErrorGlobal('Confirma que verificaste físicamente los bienes y sus documentos antes de registrar la recepción.');
+      return;
+    }
 
     setLoading(true);
     setErrorGlobal(null);
     try {
       const filasAEnviar = filasAnalizadas
-        .filter((f) => f.esValida)
         .map((f) => f.datos);
 
-      const res = await api.importarCSV(filasAEnviar);
+      const res = await api.importarCSV(filasAEnviar, true);
       setResultadoFinal(res.data);
-      if (onActivosImportados) {
+      const erroresServidor = new Map(
+        (res.data.filas_invalidas || []).map((fila) => [fila.fila, fila.error])
+      );
+      setFilasAnalizadas((actuales) => actuales.map((fila) => {
+        const errorServidor = erroresServidor.get(fila.numFila);
+        if (!errorServidor || fila.errores.includes(errorServidor)) return fila;
+        return { ...fila, esValida: false, errores: [...fila.errores, errorServidor] };
+      }));
+      setResumen({
+        total: res.data.resumen.total_procesadas,
+        validas: res.data.resumen.validas,
+        conError: res.data.resumen.con_error
+      });
+      setTabFiltro(res.data.resumen.con_error > 0 ? 'errores' : 'todas');
+      if (res.data.resumen.validas > 0 && onActivosImportados) {
         onActivosImportados();
       }
     } catch (err) {
@@ -338,12 +442,25 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
                 type="button"
                 className="btn btn-primary"
                 onClick={handleProcesarImportacion}
-                disabled={loading}
+                disabled={loading || !recepcionVerificada}
               >
                 <ArrowRight size={16} />
                 {loading ? 'Procesando inserción...' : `Confirmar e Importar ${resumen.validas} Activos`}
               </button>
             )}
+          </div>
+
+          <div className="alert alert-info" style={{ marginBottom: 18 }}>
+            <input
+              type="checkbox"
+              checked={recepcionVerificada}
+              onChange={(event) => setRecepcionVerificada(event.target.checked)}
+              disabled={!isAdmin || loading || Boolean(resultadoFinal)}
+              style={{ marginRight: 8 }}
+            />
+            <label style={{ cursor: isAdmin ? 'pointer' : 'default' }}>
+              Confirmo que cotejé físicamente los bienes, sus identificadores, cantidades, estado y OC/contrato antes de registrar la recepción del lote.
+            </label>
           </div>
 
           <div className="stats-grid" style={{ marginBottom: 18 }}>
@@ -374,9 +491,9 @@ SP-HW-1005;InvalidaCat;Equipo con Categoría Inválida;Debe dar error de validac
             <div className="alert alert-success" style={{ marginBottom: 18 }}>
               <CheckCircle2 size={24} style={{ flexShrink: 0 }} />
               <div>
-                <strong>¡Importación Concluida con Éxito!</strong>
+                <strong>Importación procesada</strong>
                 <p style={{ marginTop: 4 }}>
-                  Se han insertado <strong>{resultadoFinal.resumen.validas} activos</strong> nuevos en la base de datos municipal y se crearon sus respectivas entradas inmutables en la bitácora de auditoría.
+                  Se insertaron <strong>{resultadoFinal.resumen.validas} activos</strong> y {resultadoFinal.resumen.con_error} filas tuvieron errores. Las filas aceptadas quedaron registradas en la bitácora.
                 </p>
               </div>
             </div>

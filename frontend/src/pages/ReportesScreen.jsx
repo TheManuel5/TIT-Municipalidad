@@ -36,7 +36,7 @@ export function ReportesScreen({ onSelectActivo }) {
       const [resumenRes, costosRes, alertasRes] = await Promise.all([
         api.getReporteResumen(),
         api.getReporteCostos(),
-        api.getAlertas(90)
+        api.getReporteGarantias(90)
       ]);
       setResumen(resumenRes.data);
       setCostos(costosRes.data);
@@ -75,6 +75,10 @@ export function ReportesScreen({ onSelectActivo }) {
       </div>
     );
   }
+
+  const totales = resumen.totales;
+  const porcentajeActivosValidados = totales.porcentaje_activos_validados;
+  const metaActivosValidadosCumplida = porcentajeActivosValidados >= 95;
 
   return (
     <div className="page-wrapper">
@@ -385,6 +389,9 @@ export function ReportesScreen({ onSelectActivo }) {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
+              {alertas.garantias_por_vencer.length === 0 && (
+                <p style={{ color: 'var(--text-muted)' }}>No hay garantías que venzan dentro de los próximos 90 días.</p>
+              )}
               {alertas.garantias_por_vencer.map((g) => (
                 <div 
                   key={g.id_activo} 
@@ -436,18 +443,22 @@ export function ReportesScreen({ onSelectActivo }) {
                 <span className="okr-kpi-badge">PR-1 • Proyecto A</span>
               </div>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0' }}>
-                100% de los activos críticos con responsable y estado validados al cierre de 2027.
+                Activos con custodio, estado y datos de revisión registrados.
               </p>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '6px 0' }}>
-                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#059669' }}>96.2%</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800, color: metaActivosValidadosCumplida ? '#059669' : '#d97706' }}>
+                  {porcentajeActivosValidados}%
+                </span>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Meta: ≥ 95%</span>
               </div>
               <div className="okr-meter-bar">
-                <div className="okr-meter-fill" style={{ width: '96.2%', background: '#059669' }} />
+                <div className="okr-meter-fill" style={{ width: `${Math.min(porcentajeActivosValidados, 100)}%`, background: metaActivosValidadosCumplida ? '#059669' : '#d97706' }} />
               </div>
               <div className="okr-footer">
-                <span>Indicador: % activos validados</span>
-                <span style={{ color: '#059669', fontWeight: 600 }}>✓ En Meta</span>
+                <span>{totales.activos_validados} de {totales.total_activos} activos</span>
+                <span style={{ color: metaActivosValidadosCumplida ? '#059669' : '#d97706', fontWeight: 600 }}>
+                  {metaActivosValidadosCumplida ? '✓ En Meta' : 'Pendiente de meta'}
+                </span>
               </div>
             </div>
 

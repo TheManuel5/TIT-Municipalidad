@@ -5,7 +5,7 @@
  * Implementa las mismas funciones que api.mock.js con llamadas HTTP fetch reales y manejo de token Bearer.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');
 const TOKEN_KEY = 'san_pablo_jwt_token';
 const AUTH_KEY = 'san_pablo_auth_user_v1';
 
@@ -15,7 +15,7 @@ function getToken() {
 }
 
 // Helper genérico para peticiones con token y manejo de 401
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, responseType = 'json') {
   const token = getToken();
   const headers = {
     'Content-Type': 'application/json',
@@ -34,11 +34,14 @@ async function request(endpoint, options = {}) {
     throw new Error(`Error de conexión con el servidor (${BASE_URL}): Verifique que el backend esté corriendo.`);
   }
 
+  const responseText = await response.text();
   let data = null;
   try {
-    data = await response.json();
-  } catch (parseErr) {
-    // Si la respuesta no es JSON o viene vacía
+    data = responseText ? JSON.parse(responseText) : null;
+  } catch (error) {
+    if (response.ok && responseType === 'json') {
+      throw new Error('El servidor devolvió una respuesta JSON inválida.');
+    }
   }
 
   // Manejo de expiración o credenciales incorrectas (401)
@@ -70,7 +73,7 @@ async function request(endpoint, options = {}) {
     throw err;
   }
 
-  return data;
+  return responseType === 'text' ? responseText : data;
 }
 
 export const apiReal = {
@@ -172,27 +175,48 @@ export const apiReal = {
     return await request('/reportes/costos');
   },
 
+  // GET /api/reportes/garantias?dias=90
+  async getReporteGarantias(dias = 90) {
+    return await request(`/reportes/garantias?dias=${encodeURIComponent(dias)}`);
+  },
+
+  async getConciliaciones() {
+    return await request('/conciliaciones');
+  },
+
+  async getConciliacion(id) {
+    return await request(`/conciliaciones/${encodeURIComponent(id)}`);
+  },
+
+  async crearConciliacion() {
+    return await request('/conciliaciones', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+  },
+
+  async registrarInspeccion(conciliacionId, idActivo, datos) {
+    return await request(`/conciliaciones/${encodeURIComponent(conciliacionId)}/activos/${encodeURIComponent(idActivo)}`, {
+      method: 'PUT',
+      body: JSON.stringify(datos)
+    });
+  },
+
   // 13. POST /api/importar
-  async importarCSV(filas) {
+  async importarCSV(filas, recepcionVerificada = false) {
     return await request('/importar', {
       method: 'POST',
-      body: JSON.stringify({ filas })
+      body: JSON.stringify({ filas, recepcion_verificada: recepcionVerificada })
     });
   },
 
   // Exportar inventario
   async exportarActivos(formato = 'csv') {
-    const token = getToken();
-    const url = `${BASE_URL}/exportar?formato=${formato}`;
-    const res = await fetch(url, {
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
-    });
-
-    if (formato === 'json') {
-      return await res.json();
+    if (!['csv', 'json'].includes(formato)) {
+      throw new Error("El formato de exportación debe ser 'csv' o 'json'.");
     }
-    return await res.text();
+
+    const res = await request(`/exportar?formato=${formato}`, {}, formato === 'csv' ? 'text' : 'json');
+    return formato === 'json' ? res?.data : res;
   }
 };

@@ -74,6 +74,28 @@ router.post('/', soloAdminTI, (req, res) => {
     });
   }
 
+  if (!String(contrato_oc || '').trim()) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'La orden de compra o contrato es obligatoria para documentar la recepción.',
+        details: []
+      }
+    });
+  }
+
+  if (data.recepcion_verificada !== true) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Confirme la verificación física y documental de la recepción antes de registrar el activo.',
+        details: []
+      }
+    });
+  }
+
   // 2. Validación de listas cerradas
   if (!CATEGORIAS_VALIDAS.includes(categoria)) {
     return res.status(400).json({
@@ -176,7 +198,7 @@ router.post('/', soloAdminTI, (req, res) => {
         null,
         custodio.trim(),
         motivo || 'Alta inicial del activo en el sistema de inventario tecnológico',
-        'Incorporación de activo nuevo según Plan Informático Municipal'
+        `Recepción física y documental verificada por ${req.user.nombre || req.user.username} antes del alta; documento: ${contrato_oc.trim()}.`
       );
     });
 

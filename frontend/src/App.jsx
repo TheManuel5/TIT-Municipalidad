@@ -8,6 +8,7 @@ import { ActivosListScreen } from './pages/ActivosListScreen';
 import { ActivoDetailScreen } from './pages/ActivoDetailScreen';
 import { ActivoFormScreen } from './pages/ActivoFormScreen';
 import { ReportesScreen } from './pages/ReportesScreen';
+import { ConciliacionScreen } from './pages/ConciliacionScreen';
 import { ImportarScreen } from './pages/ImportarScreen';
 import { ContratoApiScreen } from './pages/ContratoApiScreen';
 
@@ -114,6 +115,10 @@ export function App() {
 
           {currentTab === 'reportes' && (
             <ReportesScreen onSelectActivo={handleSelectActivo} />
+          )}
+
+          {currentTab === 'conciliacion' && (
+            <ConciliacionScreen />
           )}
 
           {currentTab === 'importar' && (
