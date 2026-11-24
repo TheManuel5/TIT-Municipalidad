@@ -1,9 +1,9 @@
 # Seguridad, Auditoría y Respaldos
 
-**Sistema de Gestión de Inventario Tecnológico (Proyecto A)**
-Ilustre Municipalidad de San Pablo — Plan Informático Municipal 2027–2031
-**Responsable:** Alfredo Flores Ibarra
-**Relación con los requerimientos:** RF-2 (mantenciones), RF-6 (jerarquía y privilegios), RNF-3 (cifrado y seguridad), RNF-5 (respaldos), RNF-6 (auditoría).
+**Sistema de Gestión de Inventario Tecnológico (Proyecto A)**  
+Ilustre Municipalidad de San Pablo — Plan Informático Municipal 2027–2031  
+**Responsable:** Alfredo Flores Ibarra  
+**Relación con los requerimientos:** RF-2 (mantenciones), RF-6 (jerarquía y privilegios), RNF-3 (cifrado y seguridad), RNF-5 (respaldos), RNF-6 (auditoría).  
 **Marco normativo considerado:** Ley N.º 21.663 (Marco de Ciberseguridad), Ley N.º 21.719 (Protección de Datos Personales), Ley N.º 20.285 (Transparencia), Ley N.º 21.459 (Delitos Informáticos), Ley N.º 18.695 (Orgánica de Municipalidades).
 
 ---

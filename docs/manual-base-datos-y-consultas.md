@@ -1,10 +1,10 @@
 # Manual Técnico — Base de Datos y Endpoints de Lectura
 
-**Sistema de Gestión de Inventario Tecnológico (Proyecto A)**
-Ilustre Municipalidad de San Pablo — Plan Informático Municipal 2027–2031
-**Responsable:** Alfredo Flores Ibarra
-**Alcance:** `db/schema.sql`, `db/database.js`, `db/seed.js`, `db/backup.js`, `backend/routes/consultas.js` y `backend/tests/`
-**Ver también:** [`docs/seguridad.md`](seguridad.md) (contraseñas, usuarios, auditoría y respaldos)
+**Sistema de Gestión de Inventario Tecnológico (Proyecto A)**  
+Ilustre Municipalidad de San Pablo — Plan Informático Municipal 2027–2031  
+**Responsable:** Alfredo Flores Ibarra  
+**Alcance:** `db/schema.sql`, `db/database.js`, `db/seed.js`, `db/backup.js`, `backend/routes/consultas.js` y `backend/tests/`  
+**Ver también:** [`docs/seguridad.md`](seguridad.md) (contraseñas, usuarios, auditoría y respaldos)  
 **Documento de referencia:** [`docs/contrato-api.md`](contrato-api.md) (fuente única de verdad del equipo)
 
 ---

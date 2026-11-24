@@ -44,6 +44,7 @@ Contiene:
 | Auditoría y respaldos | Triggers SQLite + `crypto` de Node | Registro inmutable; respaldos verificados (SHA-256) y cifrables (AES-256-GCM). |
 | Pruebas | `node:test` (incluido en Node) | 136 pruebas automáticas del backend. |
 
+📘 **Manual de usuario:** [`docs/manual-usuario.md`](docs/manual-usuario.md) (versión PDF en [`docs/entregables/`](docs/entregables/))  
 📄 Documentación técnica: [`docs/manual-base-datos-y-consultas.md`](docs/manual-base-datos-y-consultas.md) · [`docs/seguridad.md`](docs/seguridad.md)
 
 ---
