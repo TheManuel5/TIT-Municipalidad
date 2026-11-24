@@ -1,5 +1,6 @@
 /**
  * api.real.js - Conexión con la API Real (Express + SQLite)
+ * Responsable: Gaby
  * Municipalidad de San Pablo - Plan Informático Municipal 2027-2031 (Proyecto A)
  * Implementa las funciones del contrato con llamadas HTTP fetch y manejo de token Bearer.
  */

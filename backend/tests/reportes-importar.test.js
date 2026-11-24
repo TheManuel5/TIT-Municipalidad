@@ -164,6 +164,23 @@ describe('Importación de activos', () => {
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activos WHERE id_activo = 'SP-GAB-9012'").get().n, 0);
   });
 
+  test('admite importaciones mayores al límite JSON general', async () => {
+    const r = await api.request('POST', '/importar', {
+      token: admin,
+      body: {
+        recepcion_verificada: true,
+        filas: [{
+          ...fila('SP-GAB-LARGE-9013'),
+          categoria: 'No permitida',
+          descripcion: 'x'.repeat(2 * 1024 * 1024)
+        }]
+      }
+    });
+
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.data.resumen, { total_procesadas: 1, validas: 0, con_error: 1 });
+  });
+
   test('el CSV de prueba contiene filas válidas para importar', async () => {
     const contenido = fs.readFileSync(
       path.join(__dirname, '../../docs/ejemplo_importacion_activos.csv'),

@@ -329,25 +329,32 @@ export function ImportarScreen({ onActivosImportados }) {
     setLoading(true);
     setErrorGlobal(null);
     try {
-      const filasAEnviar = filasAnalizadas
-        .map((f) => f.datos);
+      const filasValidas = filasAnalizadas.filter((fila) => fila.esValida);
+      const filasAEnviar = filasValidas.map((fila) => fila.datos);
 
       const res = await api.importarCSV(filasAEnviar, true);
-      setResultadoFinal(res.data);
-      const erroresServidor = new Map(
-        (res.data.filas_invalidas || []).map((fila) => [fila.fila, fila.error])
-      );
+      const erroresServidor = new Map();
+      for (const errorFila of res.data.filas_invalidas || []) {
+        const filaOriginal = filasValidas[errorFila.fila - 1];
+        if (filaOriginal) erroresServidor.set(filaOriginal.numFila, errorFila.error);
+      }
       setFilasAnalizadas((actuales) => actuales.map((fila) => {
         const errorServidor = erroresServidor.get(fila.numFila);
         if (!errorServidor || fila.errores.includes(errorServidor)) return fila;
         return { ...fila, esValida: false, errores: [...fila.errores, errorServidor] };
       }));
-      setResumen({
-        total: res.data.resumen.total_procesadas,
+      const resumenFinal = {
+        total_procesadas: filasAnalizadas.length,
         validas: res.data.resumen.validas,
-        conError: res.data.resumen.con_error
+        con_error: filasAnalizadas.length - filasValidas.length + res.data.resumen.con_error
+      };
+      setResultadoFinal({ ...res.data, resumen: resumenFinal });
+      setResumen({
+        total: resumenFinal.total_procesadas,
+        validas: resumenFinal.validas,
+        conError: resumenFinal.con_error
       });
-      setTabFiltro(res.data.resumen.con_error > 0 ? 'errores' : 'todas');
+      setTabFiltro(resumenFinal.con_error > 0 ? 'errores' : 'todas');
     } catch (err) {
       setErrorGlobal(err.message || 'Error durante el procesamiento masivo.');
     } finally {

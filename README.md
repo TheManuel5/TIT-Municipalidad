@@ -116,7 +116,7 @@ npm run seed:reset
    - **Modal de Traslado:** reasignación de unidad, ubicación y custodio con motivo obligatorio.
    - **Modal de Baja:** justificación legal y técnica **estrictamente obligatoria** (Ley N.º 18.695).
 7. **Reportes y Métricas:** pestañas de Resumen General, Análisis Financiero de Costos y TCO a 5 años, y Auditoría de Vigencia de Garantías.
-8. **Importación Masiva (CSV):** arrastre de archivo CSV, descarga de plantilla estándar, carga de lote de prueba rápido, análisis fila por fila con discriminación entre filas válidas y erróneas, y procesamiento masivo con registro automático en bitácora.
+8. **Importación Masiva (CSV):** arrastre de archivo CSV, descarga de plantilla estándar, análisis fila por fila con discriminación entre filas válidas y erróneas, y procesamiento masivo con registro automático en bitácora.
 9. **Conciliación Física:** muestra aleatoria del 10% de activos vigentes, captura de diferencias y aceptación con un máximo de 5% de discrepancias.
 10. **Control de recepción:** las altas e importaciones exigen confirmar la recepción física/documental y registrar la orden de compra o contrato.
 11. **Visor del Contrato API:** pantalla integrada con la especificación de los 26 endpoints para referencia en vivo.
