@@ -95,7 +95,7 @@ Si `req.user.rol !== 'admin_ti'`:
 
 ---
 
-## 4. Los 13 Endpoints de la API
+## 4. Los 19 Endpoints de la API
 
 ### 4.1 Autenticación (Ivan)
 
@@ -321,7 +321,7 @@ Si `req.user.rol !== 'admin_ti'`:
 ### 4.3 Endpoints de Escritura (Ivan)
 
 #### Endpoint 7: `POST /api/activos`
-- **Descripción:** Alta de un nuevo activo institucional (Solo `admin_ti`). Escribe automáticamente evento `'ALTA'` en historial.
+- **Descripción:** Alta de un nuevo activo institucional (Solo `admin_ti`). Requiere verificar la recepción física/documental y escribe esa confirmación junto al evento `'ALTA'` inmutable.
 - **Payload:**
   ```json
   {
@@ -345,9 +345,11 @@ Si `req.user.rol !== 'admin_ti'`:
     "costo_inicial": 720000,
     "costo_anual": 0,
     "configuracion_red": "192.168.10.15 / VLAN 10 / Win 11 23H2",
-    "responsable_revision": "Felipe Oyarzún Mansilla"
+    "responsable_revision": "Felipe Oyarzún Mansilla",
+    "recepcion_verificada": true
   }
   ```
+- `contrato_oc` y `recepcion_verificada: true` son obligatorios. La bitácora guarda el usuario, el momento y el documento asociado a la recepción.
 - **Respuesta (201 Created):**
   ```json
   {
@@ -423,6 +425,7 @@ Si `req.user.rol !== 'admin_ti'`:
 
 #### Endpoint 11: `GET /api/reportes/resumen`
 - **Descripción:** Consolidados para el Dashboard municipal.
+- **IND-01:** Un activo cuenta como validado si tiene custodio, estado operativo, fecha de revisión y responsable de revisión informados. El porcentaje usa los activos visibles para el rol autenticado.
 - **Respuesta (200 OK):**
   ```json
   {
@@ -430,34 +433,41 @@ Si `req.user.rol !== 'admin_ti'`:
     "data": {
       "totales": {
         "total_activos": 106,
-        "operativos": 94,
-        "en_reparacion": 5,
-        "de_baja": 7,
-        "alertas_garantia": 6
+        "operativos": 101,
+        "en_reparacion": 2,
+        "de_baja": 3,
+        "alertas_garantia": 14,
+        "activos_validados": 106,
+        "porcentaje_activos_validados": 100
       },
       "por_categoria": [
-        { "categoria": "PC", "cantidad": 64 },
+        { "categoria": "PC", "cantidad": 41 },
+        { "categoria": "Portátil", "cantidad": 23 },
         { "categoria": "Impresora", "cantidad": 18 },
         { "categoria": "Red", "cantidad": 14 },
         { "categoria": "Software", "cantidad": 8 },
         { "categoria": "Servidor", "cantidad": 2 }
       ],
       "por_estado": [
-        { "estado": "Bueno", "cantidad": 72 },
-        { "estado": "Regular", "cantidad": 22 },
-        { "estado": "Malo", "cantidad": 0 },
-        { "estado": "En reparación", "cantidad": 5 },
-        { "estado": "De baja", "cantidad": 7 }
+        { "estado": "Bueno", "cantidad": 96 },
+        { "estado": "Regular", "cantidad": 5 },
+        { "estado": "De baja", "cantidad": 3 },
+        { "estado": "En reparación", "cantidad": 2 }
       ],
       "por_unidad": [
-        { "unidad": "DIDECO", "cantidad": 24 },
-        { "unidad": "DAF", "cantidad": 18 },
-        { "unidad": "DOM", "cantidad": 16 },
-        { "unidad": "Secretaría Municipal", "cantidad": 14 },
-        { "unidad": "Informática", "cantidad": 12 },
-        { "unidad": "Salud", "cantidad": 10 },
-        { "unidad": "Educación", "cantidad": 8 },
-        { "unidad": "Control", "cantidad": 4 }
+        { "unidad": "DIDECO", "cantidad": 21 },
+        { "unidad": "Informática", "cantidad": 14 },
+        { "unidad": "DAF", "cantidad": 12 },
+        { "unidad": "Salud", "cantidad": 12 },
+        { "unidad": "DOM", "cantidad": 11 },
+        { "unidad": "Educación", "cantidad": 7 },
+        { "unidad": "Secretaría Municipal", "cantidad": 7 },
+        { "unidad": "Alcaldía", "cantidad": 5 },
+        { "unidad": "Control", "cantidad": 5 },
+        { "unidad": "SECPLAN", "cantidad": 5 },
+        { "unidad": "Aseo y Ornato", "cantidad": 3 },
+        { "unidad": "Juzgado de Policía Local", "cantidad": 3 },
+        { "unidad": "Asesoría Jurídica", "cantidad": 1 }
       ]
     }
   }
@@ -470,24 +480,44 @@ Si `req.user.rol !== 'admin_ti'`:
   {
     "success": true,
     "data": {
-      "inversion_total_inicial": 68450000,
-      "costo_anual_recurrente_total": 4200000,
-      "tco_estimado_5_anos": 89450000,
+      "inversion_total_inicial": 65080000,
+      "costo_anual_recurrente_total": 4870000,
+      "tco_estimado_5_anos": 89430000,
       "desglose_por_categoria": [
-        { "categoria": "PC", "inversion_inicial": 38400000, "costo_anual": 0 },
-        { "categoria": "Portátil", "inversion_inicial": 14300000, "costo_anual": 0 },
-        { "categoria": "Servidor", "inversion_inicial": 4800000, "costo_anual": 600000 },
-        { "categoria": "Red", "inversion_inicial": 6200000, "costo_anual": 400000 },
-        { "categoria": "Impresora", "inversion_inicial": 4750000, "costo_anual": 1200000 },
-        { "categoria": "Software", "inversion_inicial": 0, "costo_anual": 2000000 }
+        { "categoria": "PC", "inversion_inicial": 24190000, "costo_anual": 0, "cantidad": 41 },
+        { "categoria": "Portátil", "inversion_inicial": 15640000, "costo_anual": 0, "cantidad": 23 },
+        { "categoria": "Red", "inversion_inicial": 7900000, "costo_anual": 550000, "cantidad": 14 },
+        { "categoria": "Impresora", "inversion_inicial": 7150000, "costo_anual": 720000, "cantidad": 18 },
+        { "categoria": "Software", "inversion_inicial": 5400000, "costo_anual": 3000000, "cantidad": 8 },
+        { "categoria": "Servidor", "inversion_inicial": 4800000, "costo_anual": 600000, "cantidad": 2 }
+      ],
+      "desglose_por_unidad": [
+        { "unidad": "Informática", "inversion_inicial": 12340000, "costo_anual": 1965000, "cantidad": 14 },
+        { "unidad": "DIDECO", "inversion_inicial": 11280000, "costo_anual": 145000, "cantidad": 21 },
+        { "unidad": "DOM", "inversion_inicial": 8210000, "costo_anual": 555000, "cantidad": 11 },
+        { "unidad": "DAF", "inversion_inicial": 8060000, "costo_anual": 1670000, "cantidad": 12 },
+        { "unidad": "Salud", "inversion_inicial": 6510000, "costo_anual": 195000, "cantidad": 12 },
+        { "unidad": "Educación", "inversion_inicial": 3740000, "costo_anual": 65000, "cantidad": 7 },
+        { "unidad": "Secretaría Municipal", "inversion_inicial": 3290000, "costo_anual": 40000, "cantidad": 7 },
+        { "unidad": "SECPLAN", "inversion_inicial": 2900000, "costo_anual": 25000, "cantidad": 5 },
+        { "unidad": "Alcaldía", "inversion_inicial": 2790000, "costo_anual": 40000, "cantidad": 5 },
+        { "unidad": "Control", "inversion_inicial": 2700000, "costo_anual": 40000, "cantidad": 5 },
+        { "unidad": "Aseo y Ornato", "inversion_inicial": 1290000, "costo_anual": 65000, "cantidad": 3 },
+        { "unidad": "Juzgado de Policía Local", "inversion_inicial": 1290000, "costo_anual": 65000, "cantidad": 3 },
+        { "unidad": "Asesoría Jurídica", "inversion_inicial": 680000, "costo_anual": 0, "cantidad": 1 }
       ]
     }
   }
   ```
 
+#### Reporte complementario: `GET /api/reportes/garantias?dias=90`
+- **Descripción:** Garantías y licencias que vencen hoy o dentro del período indicado (máximo 3650 días). No incluye vencimientos pasados ni activos dados de baja. Aplica el filtro de unidad para `jefatura`.
+- **Respuesta:** mismo objeto `data` que `GET /api/alertas`, con `garantias_por_vencer` y `licencias_por_vencer`.
+
 #### Endpoint 13: `POST /api/importar`
 - **Descripción:** Carga masiva de activos desde archivo CSV (Solo `admin_ti`).
-- **Formato:** `multipart/form-data` con campo `file` o payload JSON `{ "filas": [ ... ] }`.
+- **Formato:** payload JSON `{ "recepcion_verificada": true, "filas": [ ... ] }`. El frontend analiza el CSV y envía las filas válidas.
+- Cada fila debe incluir `contrato_oc`; el lote debe confirmar la inspección física/documental antes de registrar cualquier alta. La confirmación queda en la bitácora de cada activo.
 - **Respuesta (200 OK):**
   ```json
   {
@@ -517,6 +547,46 @@ Si `req.user.rol !== 'admin_ti'`:
 #### Endpoint Complementario: `GET /api/exportar?formato=csv|json`
 - **Descripción:** Descarga del inventario completo en formato estándar (Ley 21.180).
 - Retorna archivo descargable `.csv` o arreglo JSON. Respeta filtros de rol.
+
+#### Endpoint 14: `GET /api/reportes/garantias?dias=90`
+- **Descripción:** Garantías y licencias que vencen hoy o dentro del plazo solicitado.
+- Excluye vencimientos pasados y bienes dados de baja; respeta el filtro de unidad de `jefatura`.
+
+#### Endpoint 15: `GET /api/exportar?formato=csv|json`
+- **Descripción:** Exporta activos como CSV o JSON, con campos protegidos según el rol autenticado.
+- Valores permitidos para `formato`: `csv` y `json`.
+
+### 4.5 Conciliación física y control de recepción
+
+La aplicación registra la conciliación de aceptación usando una muestra aleatoria del 10% de los activos vigentes (excluye los bienes dados de baja; tamaño calculado con `ceil(total * 0.10)`). Cada elemento compara ID, ubicación, unidad, custodio y estado observados contra la ficha guardada. La tasa se calcula como `discrepancias / elementos inspeccionados * 100`; una conciliación completa cumple si el resultado es ≤5%.
+
+Los endpoints requieren Bearer JWT. `admin_ti` puede iniciar sesiones e inspeccionar; `lectura` puede consultar resultados; `jefatura` no accede porque la muestra abarca varias unidades.
+
+#### Endpoint 16: `GET /api/conciliaciones`
+- **Descripción:** Lista sesiones de conciliación, avance, discrepancias y resultado.
+
+#### Endpoint 17: `GET /api/conciliaciones/:id`
+- **Descripción:** Devuelve la sesión y los datos registrados/observados por cada activo de la muestra.
+
+#### Endpoint 18: `POST /api/conciliaciones`
+- **Permiso:** Solo `admin_ti`.
+- **Descripción:** Crea una sesión y persiste la muestra aleatoria del 10% como elementos pendientes.
+
+#### Endpoint 19: `PUT /api/conciliaciones/:id/activos/:id_activo`
+- **Permiso:** Solo `admin_ti`.
+- **Payload (bien encontrado):**
+  ```json
+  {
+    "encontrado": true,
+    "id_activo_observado": "SP-HW-0042",
+    "ubicacion_observado": "DIDECO - Oficina 2",
+    "unidad_observado": "DIDECO",
+    "custodio_observado": "Marcela Huenchumán Soto",
+    "estado_operativo_observado": "Bueno"
+  }
+  ```
+- **Payload (bien no encontrado):** `{ "encontrado": false, "detalle": "No se encontró en la ubicación informada." }`.
+- Si hay discrepancias se exige `detalle`. Cada activo de la muestra se registra una sola vez; la sesión se cierra al completar toda la muestra.
 
 ---
 

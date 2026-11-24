@@ -10,6 +10,7 @@ const router = express.Router();
 const { verificarToken } = require('../middlewares/auth');
 const { aplicarFiltroUnidad, sanitizarActivo } = require('../middlewares/roles');
 const db = require('../../db/database');
+const { leerDias, obtenerAlertas } = require('../utils/alertas');
 
 // Proteger únicamente los endpoints de este módulo con autenticación Bearer
 router.use('/activos', verificarToken);
@@ -50,17 +51,6 @@ router.get('/catalogos', (req, res) => {
   });
 });
 
-// Zona horaria de la municipalidad: "hoy" debe ser la fecha local de Chile, no la UTC
-// (entre las 21:00 y medianoche la fecha UTC ya es el día siguiente).
-const ZONA_HORARIA = process.env.APP_TZ || 'America/Santiago';
-const DIAS_ALERTA_DEFAULT = 60;
-const DIAS_ALERTA_MAX = 3650;
-
-function fechaHoyLocal() {
-  // 'sv-SE' formatea como YYYY-MM-DD
-  return new Date().toLocaleDateString('sv-SE', { timeZone: ZONA_HORARIA });
-}
-
 /**
  * Endpoint 5: GET /api/alertas?dias=60
  * Garantías (hardware) y licencias (software) por vencer dentro de los próximos `dias` días.
@@ -70,74 +60,24 @@ function fechaHoyLocal() {
  * - dias_restantes es la diferencia exacta en días calendario respecto de hoy (0 = vence hoy).
  */
 router.get('/alertas', aplicarFiltroUnidad, (req, res) => {
-  let dias = DIAS_ALERTA_DEFAULT;
-  if (req.query.dias !== undefined && req.query.dias !== '') {
-    dias = Number(req.query.dias);
-    if (!Number.isInteger(dias) || dias < 0 || dias > DIAS_ALERTA_MAX) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'BAD_REQUEST',
-          message: `El parámetro 'dias' debe ser un entero entre 0 y ${DIAS_ALERTA_MAX}.`,
-          details: [{ campo: 'dias', valor: req.query.dias }]
-        }
-      });
-    }
+  const dias = leerDias(req.query.dias);
+  if (dias === null) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: "El parámetro 'dias' debe ser un entero entre 0 y 3650.",
+        details: [{ campo: 'dias', valor: req.query.dias }]
+      }
+    });
   }
-
-  const hoy = fechaHoyLocal();
-  const esJefatura = req.user.rol === 'jefatura';
-
-  let sqlGarantias = `
-    SELECT
-      id_activo, marca_modelo, categoria, unidad, custodio, fecha_garantia, proveedor,
-      CAST(julianday(fecha_garantia) - julianday(@hoy) AS INTEGER) AS dias_restantes
-    FROM activos
-    WHERE categoria <> 'Software'
-      AND estado_operativo <> 'De baja'
-      AND fecha_garantia BETWEEN @hoy AND date(@hoy, '+' || @dias || ' days')
-  `;
-  if (esJefatura) sqlGarantias += ' AND unidad = @unidad';
-  sqlGarantias += ' ORDER BY fecha_garantia ASC, id_activo ASC';
-
-  // Licencias: los activos de software (su fecha_garantia es el vencimiento de la
-  // suscripción/soporte) + licencias adicionales registradas en la tabla `licencias`
-  // que no correspondan a un activo de software ya contado.
-  let sqlLicencias = `
-    SELECT * FROM (
-      SELECT
-        a.id_activo, a.marca_modelo AS nombre_software, a.unidad,
-        a.fecha_garantia AS fecha_vencimiento, a.costo_anual AS costo_renovacion
-      FROM activos a
-      WHERE a.categoria = 'Software' AND a.estado_operativo <> 'De baja'
-      UNION ALL
-      SELECT
-        l.id_activo, l.nombre_software, l.unidad, l.fecha_vencimiento, l.costo_renovacion
-      FROM licencias l
-      LEFT JOIN activos a ON a.id_activo = l.id_activo
-      WHERE a.id_activo IS NULL
-         OR (a.categoria <> 'Software' AND a.estado_operativo <> 'De baja')
-    )
-    WHERE fecha_vencimiento BETWEEN @hoy AND date(@hoy, '+' || @dias || ' days')
-  `;
-  if (esJefatura) sqlLicencias += ' AND unidad = @unidad';
-
-  const params = { hoy, dias, unidad: esJefatura ? req.user.unidad : null };
-  const garantias = db.prepare(sqlGarantias).all(params);
-  const licencias = db
-    .prepare(`
-      SELECT *, CAST(julianday(fecha_vencimiento) - julianday(@hoy) AS INTEGER) AS dias_restantes
-      FROM (${sqlLicencias})
-      ORDER BY fecha_vencimiento ASC, id_activo ASC
-    `)
-    .all(params);
 
   return res.status(200).json({
     success: true,
-    data: {
-      garantias_por_vencer: garantias,
-      licencias_por_vencer: licencias
-    }
+    data: obtenerAlertas(db, {
+      dias,
+      unidad: req.user.rol === 'jefatura' ? req.user.unidad : null
+    })
   });
 });
 

@@ -7,18 +7,23 @@ import {
   FileCode2, 
   ShieldCheck, 
   Building2,
-  Lock
+  Lock,
+  ClipboardCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export function Sidebar({ currentTab, setTab, isOpen, onClose }) {
   const { user } = useAuth();
   const isAdmin = user?.rol === 'admin_ti';
+  const puedeConsultarConciliaciones = isAdmin || user?.rol === 'lectura';
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'activos', label: 'Inventario de Activos', icon: Boxes },
     { id: 'reportes', label: 'Reportes y Métricas', icon: BarChart3 },
+    ...(puedeConsultarConciliaciones
+      ? [{ id: 'conciliacion', label: 'Conciliación Física', icon: ClipboardCheck }]
+      : []),
     { id: 'importar', label: 'Importar / Exportar', icon: FileUp, badge: !isAdmin ? 'Restringido' : null },
     { id: 'contrato', label: 'Contrato de API (Docs)', icon: FileCode2 }
   ];

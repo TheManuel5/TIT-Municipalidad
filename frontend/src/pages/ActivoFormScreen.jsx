@@ -34,6 +34,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [recepcionVerificada, setRecepcionVerificada] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -78,13 +79,17 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
       setError('El funcionario custodio responsable es obligatorio.');
       return;
     }
+    if (!isEdit && !recepcionVerificada) {
+      setError('Confirma que verificaste físicamente el bien y sus documentos antes de registrarlo.');
+      return;
+    }
 
     setLoading(true);
     try {
       if (isEdit) {
         await api.updateActivo(formData.id_activo, formData);
       } else {
-        await api.createActivo(formData);
+        await api.createActivo({ ...formData, recepcion_verificada: true });
       }
       onSaveSuccess(formData.id_activo);
     } catch (err) {
@@ -115,6 +120,23 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
         <div className="alert alert-danger" style={{ marginBottom: 20 }}>
           <AlertCircle size={18} style={{ flexShrink: 0 }} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {!isEdit && (
+        <div className="card" style={{ marginBottom: 18, borderLeft: '4px solid #2563eb' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontWeight: 700 }}>
+            <input
+              type="checkbox"
+              checked={recepcionVerificada}
+              onChange={(event) => setRecepcionVerificada(event.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            Confirmo que revisé físicamente el bien y cotejé su identificación, estado y orden de compra antes de registrar la recepción.
+          </label>
+          <p className="form-helper" style={{ marginTop: 6, marginLeft: 24 }}>
+            La confirmación queda registrada en la bitácora junto al usuario responsable y la OC/contrato.
+          </p>
         </div>
       )}
 
@@ -434,7 +456,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={loading}
+            disabled={loading || (!isEdit && !recepcionVerificada)}
             style={{ padding: '10px 24px' }}
           >
             <Save size={16} />

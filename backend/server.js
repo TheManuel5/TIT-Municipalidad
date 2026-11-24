@@ -12,6 +12,7 @@ const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const activosRoutes = require('./routes/activos');
+const conciliacionesRoutes = require('./routes/conciliaciones');
 const { middlewareSanitizacion } = require('./middlewares/roles');
 
 const app = express();
@@ -66,6 +67,7 @@ try {
 
 // Ivan: Endpoints 7, 8, 9 y 10: Escritura de Activos (POST /api/activos, PUT /api/activos/:id, traslado, baja)
 app.use('/api/activos', activosRoutes);
+app.use('/api/conciliaciones', conciliacionesRoutes);
 
 // Gaby: Endpoints de reportes e importación/exportación (reportes.js e importar.js)
 try {

@@ -85,7 +85,8 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
   const totalGarantiasAlertas = (alertas?.garantias_por_vencer?.length || 0) + (alertas?.licencias_por_vencer?.length || 0);
 
   // Cálculo de KPIs según Tabla 5 del Informe
-  const kpiOE1 = Math.round((totales.operativos / totales.total_activos) * 100); // % validados
+  const kpiOE1 = totales.porcentaje_activos_validados;
+  const metaOE1Cumplida = kpiOE1 >= 95;
   const kpiGarantiasVigentes = Math.round(((totales.total_activos - totalGarantiasAlertas) / totales.total_activos) * 100);
 
   // Filtrado de alertas en Alert Center
@@ -203,15 +204,17 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
               <span className="okr-kpi-badge">IND-01</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '6px 0' }}>
-              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669' }}>{kpiOE1}%</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: metaOE1Cumplida ? '#059669' : '#d97706' }}>{kpiOE1}%</span>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Meta: ≥ 95%</span>
             </div>
             <div className="okr-meter-bar">
-              <div className="okr-meter-fill" style={{ width: `${Math.min(kpiOE1, 100)}%`, background: '#059669' }} />
+              <div className="okr-meter-fill" style={{ width: `${Math.min(kpiOE1, 100)}%`, background: metaOE1Cumplida ? '#059669' : '#d97706' }} />
             </div>
             <div className="okr-footer">
-              <span>Condición: Estado Bueno / Regular</span>
-              <span style={{ color: '#059669', fontWeight: 600 }}>✓ Meta Cumplida</span>
+              <span>{totales.activos_validados} de {totales.total_activos} con custodio y revisión registrada</span>
+              <span style={{ color: metaOE1Cumplida ? '#059669' : '#d97706', fontWeight: 600 }}>
+                {metaOE1Cumplida ? '✓ Meta Cumplida' : 'Pendiente de meta'}
+              </span>
             </div>
           </div>
 

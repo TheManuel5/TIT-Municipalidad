@@ -65,6 +65,7 @@ async function iniciarServidor(app) {
   }
 
   return {
+    base,
     get: (ruta, token) => request('GET', ruta, { token }),
     request,
     login,

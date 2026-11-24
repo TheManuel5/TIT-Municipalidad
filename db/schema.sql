@@ -85,6 +85,42 @@ CREATE TABLE IF NOT EXISTS historial (
     FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE RESTRICT
 );
 
+-- Conciliación física del inventario: muestra persistida del 10% y resultados por activo.
+CREATE TABLE IF NOT EXISTS conciliaciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha_inicio TEXT NOT NULL,
+    fecha_cierre TEXT,
+    usuario TEXT NOT NULL,
+    total_activos INTEGER NOT NULL CHECK (total_activos >= 0),
+    tamano_muestra INTEGER NOT NULL CHECK (tamano_muestra >= 0),
+    inspeccionados INTEGER NOT NULL DEFAULT 0 CHECK (inspeccionados >= 0),
+    discrepancias INTEGER NOT NULL DEFAULT 0 CHECK (discrepancias >= 0),
+    porcentaje_discrepancias REAL,
+    resultado TEXT NOT NULL DEFAULT 'En curso' CHECK (resultado IN ('En curso', 'Cumple', 'No cumple'))
+);
+
+CREATE TABLE IF NOT EXISTS conciliacion_activos (
+    id_conciliacion INTEGER NOT NULL,
+    id_activo TEXT NOT NULL,
+    datos_registrados TEXT NOT NULL,
+    datos_observados TEXT,
+    encontrado INTEGER CHECK (encontrado IN (0, 1)),
+    resultado TEXT NOT NULL DEFAULT 'Pendiente' CHECK (resultado IN ('Pendiente', 'Coincide', 'Discrepancia')),
+    detalle TEXT,
+    fecha_verificacion TEXT,
+    usuario_verificacion TEXT,
+    PRIMARY KEY (id_conciliacion, id_activo),
+    FOREIGN KEY (id_conciliacion) REFERENCES conciliaciones(id) ON DELETE RESTRICT,
+    FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE RESTRICT
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_conciliacion_activo_no_rewrite
+BEFORE UPDATE ON conciliacion_activos
+WHEN OLD.resultado <> 'Pendiente'
+BEGIN
+    SELECT RAISE(ABORT, 'Una inspección física registrada no se puede modificar.');
+END;
+
 -- Bitácora inmutable (Ley N.º 21.459 / Ley N.º 20.285): solo se permite INSERT.
 -- Cualquier intento de modificar o borrar un evento se rechaza a nivel de base de datos,
 -- independiente de lo que haga la capa de aplicación.
@@ -107,3 +143,5 @@ CREATE INDEX IF NOT EXISTS idx_activos_unidad ON activos(unidad);
 CREATE INDEX IF NOT EXISTS idx_activos_garantia ON activos(fecha_garantia);
 CREATE INDEX IF NOT EXISTS idx_historial_activo ON historial(id_activo);
 CREATE INDEX IF NOT EXISTS idx_usuarios_username ON usuarios(username);
+CREATE INDEX IF NOT EXISTS idx_conciliaciones_fecha ON conciliaciones(fecha_inicio);
+CREATE INDEX IF NOT EXISTS idx_conciliacion_activos_activo ON conciliacion_activos(id_activo);
