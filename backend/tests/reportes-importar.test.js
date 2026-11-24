@@ -185,7 +185,11 @@ test('el alta manual exige y registra la verificación de recepción', async () 
     fecha_adquisicion: '2026-01-01',
     fecha_garantia: '2028-01-01',
     contrato_oc: 'OC-RECEPCION-TEST',
-    costo_inicial: 100000
+    costo_inicial: 100000,
+    fecha_revision: '2000-01-01',
+    responsable_revision: 'Usuario no autorizado',
+    motivo_baja: 'Intento de asignación desde el cliente',
+    rol: 'admin_ti'
   };
   const sinConfirmacion = await api.request('POST', '/activos', { token: admin, body: payload });
   assert.equal(sinConfirmacion.status, 400);
@@ -195,9 +199,62 @@ test('el alta manual exige y registra la verificación de recepción', async () 
     body: { ...payload, recepcion_verificada: true }
   });
   assert.equal(conConfirmacion.status, 201);
+  const activo = db.prepare(`
+    SELECT fecha_revision, responsable_revision, motivo_baja
+    FROM activos WHERE id_activo = ?
+  `).get(payload.id_activo);
+  assert.notEqual(activo.fecha_revision, payload.fecha_revision);
+  assert.equal(activo.responsable_revision, 'Felipe Oyarzún Mansilla');
+  assert.equal(activo.motivo_baja, null);
   const evento = db.prepare(`
     SELECT tipo_evento, detalles FROM historial WHERE id_activo = ? AND tipo_evento = 'ALTA'
   `).get(payload.id_activo);
   assert.match(evento.detalles, /Recepción física y documental verificada/);
   assert.match(evento.detalles, /OC-RECEPCION-TEST/);
+});
+
+test('edición CRUD persiste en SQLite y descarta campos protegidos del DTO', async () => {
+  const id = 'SP-GAB-9031';
+  const alta = await api.request('POST', '/activos', {
+    token: admin,
+    body: {
+      id_activo: id,
+      categoria: 'PC',
+      marca_modelo: 'Equipo antes de editar',
+      ubicacion: 'Informática',
+      unidad: 'Informática',
+      custodio: 'Responsable inicial',
+      fecha_adquisicion: '2026-01-01',
+      fecha_garantia: '2028-01-01',
+      contrato_oc: 'OC-DTO-TEST',
+      costo_inicial: 100000,
+      recepcion_verificada: true
+    }
+  });
+  assert.equal(alta.status, 201);
+
+  const edicion = await api.request('PUT', `/activos/${id}`, {
+    token: admin,
+    body: {
+      id_activo: 'SP-GAB-OTRO',
+      marca_modelo: 'Equipo editado',
+      custodio: 'Responsable actualizado',
+      fecha_revision: '2000-01-01',
+      responsable_revision: 'Usuario no autorizado',
+      motivo_baja: 'No debe permitir darlo de baja por edición'
+    }
+  });
+  assert.equal(edicion.status, 200);
+
+  const actualizado = db.prepare('SELECT * FROM activos WHERE id_activo = ?').get(id);
+  assert.equal(actualizado.marca_modelo, 'Equipo editado');
+  assert.equal(actualizado.custodio, 'Responsable actualizado');
+  assert.equal(actualizado.responsable_revision, 'Felipe Oyarzún Mansilla');
+  assert.notEqual(actualizado.fecha_revision, '2000-01-01');
+  assert.equal(actualizado.motivo_baja, null);
+  assert.equal(db.prepare('SELECT id_activo FROM activos WHERE id_activo = ?').get('SP-GAB-OTRO'), undefined);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS n FROM historial WHERE id_activo = ? AND tipo_evento = 'EDICION'").get(id).n,
+    1
+  );
 });

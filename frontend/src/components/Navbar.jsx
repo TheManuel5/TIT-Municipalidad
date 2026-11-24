@@ -12,26 +12,14 @@ export function Navbar({ onToggleSidebar }) {
         <button 
           type="button" 
           className="btn btn-outline btn-sm mobile-menu-btn"
-          style={{ display: 'none' }}
           onClick={onToggleSidebar}
+          aria-label="Abrir menú de navegación"
         >
           <Menu size={18} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            className="badge"
-            style={{
-              backgroundColor: '#ecfdf5',
-              color: '#047857',
-              border: '1px solid #a7f3d0',
-              fontWeight: 600,
-              fontSize: '0.72rem'
-            }}
-          >
-            API real · sin datos simulados
-          </span>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        <div className="top-header-title">
+          <span className="top-header-subtitle">
             Plan Informático Municipal 2027–2031
           </span>
         </div>
@@ -40,7 +28,7 @@ export function Navbar({ onToggleSidebar }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {/* Info del usuario logueado */}
         {user && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 12, borderLeft: '1px solid var(--border)' }}>
+          <div className="top-header-user">
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--secondary)' }}>
                 {user.nombre}

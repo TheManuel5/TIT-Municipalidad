@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { CategoryBadge, StatusBadge, getCategoryIcon } from '../components/Badge';
 import { ModalTraslado } from '../components/ModalTraslado';
 import { ModalBaja } from '../components/ModalBaja';
+import { ModalMantenimiento } from '../components/ModalMantenimiento';
 import { 
   ArrowLeft, 
   Edit3, 
@@ -25,7 +26,8 @@ import {
   Copy,
   Check,
   Tag,
-  ShieldAlert
+  ShieldAlert,
+  Wrench
 } from 'lucide-react';
 
 export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
@@ -42,6 +44,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
   // Modales
   const [trasladoModalOpen, setTrasladoModalOpen] = useState(false);
   const [bajaModalOpen, setBajaModalOpen] = useState(false);
+  const [mantModalOpen, setMantModalOpen] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -82,6 +85,12 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
   const handleConfirmTraslado = async (datos) => {
     await api.trasladarActivo(activo.id_activo, datos);
     showToast(`Traslado registrado exitosamente para ${activo.id_activo}.`);
+    cargarFicha();
+  };
+
+  const handleConfirmMantenimiento = async (datos) => {
+    await api.registrarMantenimiento(activo.id_activo, datos);
+    showToast(`Mantención ${datos.tipo_mantenimiento.toLowerCase()} registrada para ${activo.id_activo}.`);
     cargarFicha();
   };
 
@@ -154,8 +163,8 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
 
         {isAdmin && (
           <div style={{ display: 'flex', gap: 10 }}>
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => onEdit(activo)}
             >
@@ -163,14 +172,27 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               Editar Especificaciones
             </button>
 
-            <button 
-              type="button" 
-              className="btn btn-secondary btn-sm"
-              onClick={() => setTrasladoModalOpen(true)}
-            >
-              <ArrowRightLeft size={15} />
-              Registrar Traslado
-            </button>
+            {activo.estado_operativo !== 'De baja' && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setTrasladoModalOpen(true)}
+              >
+                <ArrowRightLeft size={15} />
+                Registrar Traslado
+              </button>
+            )}
+
+            {activo.estado_operativo !== 'De baja' && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setMantModalOpen(true)}
+              >
+                <Wrench size={15} />
+                Registrar Mantención
+              </button>
+            )}
 
             {activo.estado_operativo !== 'De baja' && (
               <button 
@@ -451,6 +473,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               if (ev.tipo_evento === 'TRASLADO') badgeType = 'badge-purple';
               if (ev.tipo_evento === 'EDICION') badgeType = 'badge-warning';
               if (ev.tipo_evento === 'BAJA') badgeType = 'badge-danger';
+              if (ev.tipo_evento === 'MANTENIMIENTO') badgeType = 'badge-info';
 
               const fechaFormatted = new Date(ev.fecha).toLocaleString('es-CL', {
                 dateStyle: 'medium',
@@ -516,6 +539,13 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
         onClose={() => setTrasladoModalOpen(false)}
         activo={activo}
         onConfirm={handleConfirmTraslado}
+      />
+
+      <ModalMantenimiento
+        isOpen={mantModalOpen}
+        onClose={() => setMantModalOpen(false)}
+        activo={activo}
+        onConfirm={handleConfirmMantenimiento}
       />
 
       <ModalBaja

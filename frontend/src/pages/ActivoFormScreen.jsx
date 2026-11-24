@@ -265,7 +265,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
               </select>
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Marca y Modelo Comercial *</label>
               <input
                 type="text"
@@ -279,7 +279,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
               />
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Descripción Técnica Detallada</label>
               <textarea
                 className="form-textarea"
@@ -330,7 +330,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
               />
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Ubicación Física *</label>
               <input
                 type="text"
@@ -467,7 +467,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
               />
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Licencias Asociadas y Software Preinstalado</label>
               <input
                 type="text"
@@ -522,7 +522,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 </select>
               </div>
 
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <div className="form-group form-grid-full">
                 <label className="form-label">Configuración de Red / IP / VLAN / Firmware / BitLocker</label>
                 <input
                   type="text"

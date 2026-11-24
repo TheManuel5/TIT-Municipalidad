@@ -202,7 +202,7 @@ export function ConciliacionScreen() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 0.8fr) minmax(0, 1.6fr)', gap: 18, alignItems: 'start' }}>
+      <div className="conciliacion-layout">
         <section className="card">
           <div className="card-header">
             <div className="card-title">Historial de conciliaciones</div>

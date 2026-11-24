@@ -164,6 +164,55 @@ export const apiReal = {
     });
   },
 
+  // 20. POST /api/activos/:id/mantenimiento
+  async registrarMantenimiento(id, datos) {
+    return await request(`/activos/${encodeURIComponent(id)}/mantenimiento`, {
+      method: 'POST',
+      body: JSON.stringify(datos)
+    });
+  },
+
+  // PUT /api/auth/password (cambio de la propia contraseña)
+  async cambiarPassword({ password_actual, password_nueva }) {
+    return await request('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify({ password_actual, password_nueva })
+    });
+  },
+
+  // Gestión de usuarios (solo admin_ti)
+  async getUsuarios() {
+    return await request('/usuarios');
+  },
+
+  async crearUsuario(datos) {
+    return await request('/usuarios', { method: 'POST', body: JSON.stringify(datos) });
+  },
+
+  async actualizarUsuario(id, cambios) {
+    return await request(`/usuarios/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(cambios) });
+  },
+
+  async restablecerPassword(id, passwordNueva) {
+    return await request(`/usuarios/${encodeURIComponent(id)}/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password_nueva: passwordNueva })
+    });
+  },
+
+  // Registro de auditoría (admin_ti y lectura)
+  async getAuditoria({ usuario = '', accion = '', resultado = '', desde = '', hasta = '', page = 1, limit = 50 } = {}) {
+    const params = new URLSearchParams();
+    if (usuario) params.append('usuario', usuario);
+    if (accion) params.append('accion', accion);
+    if (resultado) params.append('resultado', resultado);
+    if (desde) params.append('desde', desde);
+    if (hasta) params.append('hasta', hasta);
+    params.append('page', page);
+    params.append('limit', limit);
+    return await request(`/auditoria?${params.toString()}`);
+  },
+
   // 11. GET /api/reportes/resumen
   async getReporteResumen() {
     return await request('/reportes/resumen');

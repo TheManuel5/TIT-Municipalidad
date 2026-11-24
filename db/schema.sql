@@ -11,13 +11,20 @@ CREATE TABLE IF NOT EXISTS unidades (
 );
 
 -- Tabla de Usuarios y Roles
+-- password guarda SOLO el hash bcrypt (bcryptjs, costo 10). Nunca texto plano.
+-- activo = 0 revoca el acceso de inmediato (el middleware de autenticación lo verifica
+-- en cada petición, aunque el token JWT siga vigente).
 CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     nombre TEXT NOT NULL,
     rol TEXT NOT NULL CHECK (rol IN ('admin_ti', 'jefatura', 'lectura')),
-    unidad TEXT NOT NULL
+    unidad TEXT NOT NULL,
+    activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1)),
+    creado_en TEXT,
+    actualizado_en TEXT,
+    ultimo_acceso TEXT
 );
 
 -- Tabla de Proveedores (Ley 19.886)
@@ -136,6 +143,36 @@ BEGIN
     SELECT RAISE(ABORT, 'La bitácora de historial es inmutable: no se permite eliminar eventos.');
 END;
 
+-- Registro de auditoría de seguridad (RNF-6, Ley N.º 21.663 Marco de Ciberseguridad,
+-- Ley N.º 20.285 Transparencia): inicios de sesión, operaciones de escritura,
+-- exportaciones, gestión de usuarios y respaldos. Inmutable: solo INSERT.
+-- Nunca se registran contraseñas ni el cuerpo completo de las peticiones.
+CREATE TABLE IF NOT EXISTS auditoria (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL,
+    usuario TEXT,
+    rol TEXT,
+    ip TEXT,
+    accion TEXT NOT NULL,
+    metodo TEXT,
+    ruta TEXT,
+    estado_http INTEGER,
+    resultado TEXT NOT NULL CHECK (resultado IN ('OK', 'RECHAZADO', 'ERROR')),
+    detalle TEXT
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_auditoria_no_update
+BEFORE UPDATE ON auditoria
+BEGIN
+    SELECT RAISE(ABORT, 'El registro de auditoría es inmutable: no se permite modificar entradas.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_auditoria_no_delete
+BEFORE DELETE ON auditoria
+BEGIN
+    SELECT RAISE(ABORT, 'El registro de auditoría es inmutable: no se permite eliminar entradas.');
+END;
+
 -- Índices de Rendimiento para Búsquedas y Filtros
 CREATE INDEX IF NOT EXISTS idx_activos_categoria ON activos(categoria);
 CREATE INDEX IF NOT EXISTS idx_activos_estado ON activos(estado_operativo);
@@ -143,5 +180,7 @@ CREATE INDEX IF NOT EXISTS idx_activos_unidad ON activos(unidad);
 CREATE INDEX IF NOT EXISTS idx_activos_garantia ON activos(fecha_garantia);
 CREATE INDEX IF NOT EXISTS idx_historial_activo ON historial(id_activo);
 CREATE INDEX IF NOT EXISTS idx_usuarios_username ON usuarios(username);
+CREATE INDEX IF NOT EXISTS idx_auditoria_fecha ON auditoria(fecha);
+CREATE INDEX IF NOT EXISTS idx_auditoria_usuario ON auditoria(usuario);
 CREATE INDEX IF NOT EXISTS idx_conciliaciones_fecha ON conciliaciones(fecha_inicio);
 CREATE INDEX IF NOT EXISTS idx_conciliacion_activos_activo ON conciliacion_activos(id_activo);
