@@ -29,7 +29,14 @@ export function ContratoApiScreen() {
     { num: 16, method: 'GET', path: '/api/conciliaciones', desc: 'Lista conciliaciones físicas, su avance y su resultado.', resp: '{ "success": true, "data": [...] }' },
     { num: 17, method: 'GET', path: '/api/conciliaciones/:id', desc: 'Detalle de conciliación y observaciones de los activos inspeccionados.', resp: '{ "success": true, "data": { "activos": [...] } }' },
     { num: 18, method: 'POST', path: '/api/conciliaciones', desc: 'Inicia una muestra aleatoria del 10% de activos vigentes. Solo admin_ti.', resp: '{ "success": true, "data": { "tamano_muestra": 11, "resultado": "En curso" } }' },
-    { num: 19, method: 'PUT', path: '/api/conciliaciones/:id/activos/:id_activo', desc: 'Registra la revisión física por ID, ubicación, unidad, custodio y estado. Cierra al completar toda la muestra.', resp: '{ "success": true, "data": { "porcentaje_discrepancias": 0, "resultado": "Cumple" } }' }
+    { num: 19, method: 'PUT', path: '/api/conciliaciones/:id/activos/:id_activo', desc: 'Registra la revisión física por ID, ubicación, unidad, custodio y estado. Cierra al completar toda la muestra.', resp: '{ "success": true, "data": { "porcentaje_discrepancias": 0, "resultado": "Cumple" } }' },
+    { num: 20, method: 'POST', path: '/api/activos/:id/mantenimiento', desc: 'Registra mantención preventiva o correctiva (RF-2). Exclusivo admin_ti. Registra evento MANTENIMIENTO.', resp: '{ "success": true, "data": { "tipo_mantenimiento": "Correctiva", "ultimo_mantenimiento": "2026-11-24" } }' },
+    { num: 21, method: 'PUT', path: '/api/auth/password', desc: 'Cambio de la propia contraseña (cualquier rol). Política: 8+ caracteres, letras y números.', resp: '{ "success": true, "message": "Contraseña actualizada correctamente." }' },
+    { num: 22, method: 'GET', path: '/api/usuarios', desc: 'Lista de cuentas sin contraseñas. Exclusivo admin_ti.', resp: '{ "success": true, "data": [ { "username": "admin", "rol": "admin_ti", "activo": true } ] }' },
+    { num: 23, method: 'POST', path: '/api/usuarios', desc: 'Crea una cuenta (aprobación de acceso). Contraseña guardada con bcrypt. Exclusivo admin_ti.', resp: '{ "success": true, "data": { "id": 4, "username": "jefe_dom", "activo": true } }' },
+    { num: 24, method: 'PUT', path: '/api/usuarios/:id', desc: 'Cambia rol/unidad o revoca (activo=false) con efecto inmediato. Exclusivo admin_ti.', resp: '{ "success": true, "data": { "id": 4, "activo": false } }' },
+    { num: 25, method: 'PUT', path: '/api/usuarios/:id/password', desc: 'Restablece la contraseña de un usuario. Exclusivo admin_ti.', resp: '{ "success": true, "message": "Contraseña restablecida." }' },
+    { num: 26, method: 'GET', path: '/api/auditoria', desc: 'Registro de auditoría inmutable (logins, escrituras, exportaciones, usuarios, respaldos). admin_ti y lectura.', resp: '{ "success": true, "data": [ { "accion": "LOGIN_OK", "usuario": "admin", "resultado": "OK" } ] }' }
   ];
 
   return (
@@ -49,7 +56,7 @@ export function ContratoApiScreen() {
           Regla de Oro del Proyecto TIT (Proyecto A)
         </h3>
         <p style={{ fontSize: '0.875rem', color: '#334155' }}>
-          El archivo <code>docs/contrato-api.md</code> es la referencia única y definitiva de todo el equipo de trabajo. Define los 19 endpoints, los nombres de campo de la base de datos (Tabla 7 del Informe), las reglas de seguridad de roles y los JSON de respuesta.
+          El archivo <code>docs/contrato-api.md</code> es la referencia única y definitiva de todo el equipo de trabajo. Define los 26 endpoints, los nombres de campo de la base de datos (Tabla 7 del Informe), las reglas de seguridad de roles y los JSON de respuesta.
         </p>
       </div>
 
@@ -100,12 +107,12 @@ export function ContratoApiScreen() {
         </div>
       </div>
 
-      {/* Lista de los 19 Endpoints */}
+      {/* Lista de los 26 Endpoints */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">
             <Server size={18} />
-            <span>Los 19 Endpoints Oficiales de la API</span>
+            <span>Los 26 Endpoints Oficiales de la API</span>
           </div>
           <span className="badge badge-secondary">Host: http://localhost:3000/api</span>
         </div>

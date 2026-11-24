@@ -8,7 +8,8 @@ import {
   ShieldCheck, 
   Building2,
   Lock,
-  ClipboardCheck
+  ClipboardCheck,
+  KeyRound
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -25,6 +26,7 @@ export function Sidebar({ currentTab, setTab, isOpen, onClose }) {
       ? [{ id: 'conciliacion', label: 'Conciliación Física', icon: ClipboardCheck }]
       : []),
     { id: 'importar', label: 'Importar / Exportar', icon: FileUp, badge: !isAdmin ? 'Restringido' : null },
+    { id: 'seguridad', label: 'Seguridad y Accesos', icon: KeyRound },
     { id: 'contrato', label: 'Contrato de API (Docs)', icon: FileCode2 }
   ];
 

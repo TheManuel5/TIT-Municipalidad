@@ -4,6 +4,9 @@ import { RoleBadge } from './Badge';
 import { LogOut, User, Shield, RefreshCw, Menu } from 'lucide-react';
 import { isMockMode } from '../api';
 
+// Herramientas de demostración (selector de rol). En producción: VITE_MODO_DEMO=false
+const MODO_DEMO = import.meta.env.VITE_MODO_DEMO !== 'false';
+
 export function Navbar({ onToggleSidebar }) {
   const { user, logout, switchUser, testUsers } = useAuth();
 
@@ -39,25 +42,27 @@ export function Navbar({ onToggleSidebar }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        {/* Selector de Usuario para demostración en vivo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Shield size={15} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-            Simular rol:
-          </span>
-          <select 
-            className="form-select" 
-            style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}
-            value={user?.username || ''}
-            onChange={(e) => switchUser(e.target.value)}
-          >
-            {testUsers.map((u) => (
-              <option key={u.username} value={u.username}>
-                {u.rol === 'admin_ti' ? '⚙️ Admin TI' : (u.rol === 'jefatura' ? '🏢 Jefatura DIDECO' : '👁️ Auditoria Control')} ({u.username})
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Selector de Usuario para demostración en vivo (oculto si VITE_MODO_DEMO=false) */}
+        {MODO_DEMO && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Shield size={15} style={{ color: 'var(--text-muted)' }} />
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+              Simular rol:
+            </span>
+            <select 
+              className="form-select" 
+              style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}
+              value={user?.username || ''}
+              onChange={(e) => switchUser(e.target.value)}
+            >
+              {testUsers.map((u) => (
+                <option key={u.username} value={u.username}>
+                  {u.rol === 'admin_ti' ? '⚙️ Admin TI' : (u.rol === 'jefatura' ? '🏢 Jefatura DIDECO' : '👁️ Auditoria Control')} ({u.username})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Info del usuario logueado */}
         {user && (

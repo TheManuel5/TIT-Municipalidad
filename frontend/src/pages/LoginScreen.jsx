@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Shield, KeyRound, Building, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
 
+// Herramientas de demostración (usuario/contraseña precargados y acceso rápido).
+// En producción: VITE_MODO_DEMO=false
+const MODO_DEMO = import.meta.env.VITE_MODO_DEMO !== 'false';
+
 export function LoginScreen() {
   const { login, loading, testUsers } = useAuth();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('password123');
+  const [username, setUsername] = useState(MODO_DEMO ? 'admin' : '');
+  const [password, setPassword] = useState(MODO_DEMO ? 'password123' : '');
   const [error, setError] = useState(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('expired=1')) {
       window.history.replaceState({}, '', window.location.pathname.replace(/\/login$/, '') || '/');
@@ -130,65 +134,67 @@ export function LoginScreen() {
           </button>
         </form>
 
-        {/* Acceso Rápido para Demostración */}
-        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-            Acceso Rápido para Pruebas (3 Roles):
-          </div>
+        {/* Acceso Rápido para Demostración (oculto si VITE_MODO_DEMO=false) */}
+        {MODO_DEMO && (
+          <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+              Acceso Rápido para Pruebas (3 Roles):
+            </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {testUsers.map((u) => {
-              const isAdmin = u.rol === 'admin_ti';
-              const isJefe = u.rol === 'jefatura';
-              return (
-                <button
-                  key={u.username}
-                  type="button"
-                  onClick={() => handleQuickLogin(u)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#2563eb';
-                    e.currentTarget.style.background = '#eff6ff';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#cbd5e1';
-                    e.currentTarget.style.background = '#f8fafc';
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 600, color: '#0f172a' }}>
-                      {u.nombre}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {testUsers.map((u) => {
+                const isAdmin = u.rol === 'admin_ti';
+                const isJefe = u.rol === 'jefatura';
+                return (
+                  <button
+                    key={u.username}
+                    type="button"
+                    onClick={() => handleQuickLogin(u)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#2563eb';
+                      e.currentTarget.style.background = '#eff6ff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = '#cbd5e1';
+                      e.currentTarget.style.background = '#f8fafc';
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: '0.825rem', fontWeight: 600, color: '#0f172a' }}>
+                        {u.nombre}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                        {isAdmin ? '⚙️ Admin TI (Acceso total + IP/Red)' : (isJefe ? `🏢 Jefatura ${u.unidad}` : '👁️ Auditoria Control')}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                      {isAdmin ? '⚙️ Admin TI (Acceso total + IP/Red)' : (isJefe ? `🏢 Jefatura ${u.unidad}` : '👁️ Auditoria Control')}
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '0.7rem',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: isAdmin ? '#f3e8ff' : (isJefe ? '#e0f2fe' : '#f1f5f9'),
-                    color: isAdmin ? '#7e22ce' : (isJefe ? '#0369a1' : '#475569'),
-                    fontWeight: 700
-                  }}>
-                    {u.rol}
-                  </span>
-                </button>
-              );
-            })}
+                    <span style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      background: isAdmin ? '#f3e8ff' : (isJefe ? '#e0f2fe' : '#f1f5f9'),
+                      color: isAdmin ? '#7e22ce' : (isJefe ? '#0369a1' : '#475569'),
+                      fontWeight: 700
+                    }}>
+                      {u.rol}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

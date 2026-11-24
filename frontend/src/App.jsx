@@ -11,6 +11,7 @@ import { ReportesScreen } from './pages/ReportesScreen';
 import { ConciliacionScreen } from './pages/ConciliacionScreen';
 import { ImportarScreen } from './pages/ImportarScreen';
 import { ContratoApiScreen } from './pages/ContratoApiScreen';
+import { SeguridadScreen } from './pages/SeguridadScreen';
 
 export function App() {
   const { isAuthenticated } = useAuth();
@@ -125,6 +126,7 @@ export function App() {
             <ImportarScreen onActivosImportados={() => setCurrentTab('activos')} />
           )}
 
+          {currentTab === 'seguridad' && <SeguridadScreen />}
           {currentTab === 'contrato' && <ContratoApiScreen />}
         </main>
       </div>

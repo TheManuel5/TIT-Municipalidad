@@ -9,6 +9,8 @@ const STORAGE_KEY_ACTIVOS = 'san_pablo_activos_v1';
 const STORAGE_KEY_HISTORIAL = 'san_pablo_historial_v1';
 const STORAGE_KEY_AUTH = 'san_pablo_auth_user_v1';
 const STORAGE_KEY_CONCILIACIONES = 'san_pablo_conciliaciones_v1';
+const STORAGE_KEY_USUARIOS = 'san_pablo_usuarios_v1';
+const STORAGE_KEY_AUDITORIA = 'san_pablo_auditoria_v1';
 
 // Catálogos institucionales
 export const CATALOGOS = {
@@ -508,6 +510,57 @@ function aplicarFiltroRol(activo, user) {
 }
 
 // Simular retraso de red
+
+// ---- Usuarios y auditoría simulados (modo mock, solo para demostración local) ----
+// En el backend real las contraseñas se guardan como hash bcrypt; aquí es solo una simulación
+// en el navegador y nunca sale de localStorage.
+function getStoredUsuarios() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_USUARIOS);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* se regenera */ }
+  const iniciales = USUARIOS_PRUEBA.map((u) => ({
+    ...u, activo: true, creado_en: new Date().toISOString(), actualizado_en: null, ultimo_acceso: null
+  }));
+  localStorage.setItem(STORAGE_KEY_USUARIOS, JSON.stringify(iniciales));
+  return iniciales;
+}
+
+function saveStoredUsuarios(lista) {
+  localStorage.setItem(STORAGE_KEY_USUARIOS, JSON.stringify(lista));
+}
+
+const sinPassword = ({ password, ...resto }) => resto;
+
+function registrarAuditoriaMock(accion, { usuario, rol, resultado = 'OK', detalle = null, metodo = null, ruta = null } = {}) {
+  let lista = [];
+  try { lista = JSON.parse(localStorage.getItem(STORAGE_KEY_AUDITORIA) || '[]'); } catch (e) { lista = []; }
+  const sesion = getSessionUser();
+  lista.push({
+    id: lista.length + 1,
+    fecha: new Date().toISOString(),
+    usuario: usuario ?? sesion?.username ?? null,
+    rol: rol ?? sesion?.rol ?? null,
+    ip: '127.0.0.1 (simulado)',
+    accion, metodo, ruta,
+    estado_http: resultado === 'OK' ? 200 : 401,
+    resultado, detalle
+  });
+  localStorage.setItem(STORAGE_KEY_AUDITORIA, JSON.stringify(lista.slice(-500)));
+}
+
+function errorMock(message, status) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+function validarPasswordMock(password) {
+  if (typeof password !== 'string' || password.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(password) || !/\d/.test(password)) return 'La contraseña debe contener al menos una letra y un número.';
+  return null;
+}
+
 const delay = (ms = 180) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ==========================================
@@ -517,15 +570,19 @@ export const apiMock = {
   // 1. POST /api/auth/login
   async login(username, password) {
     await delay();
-    const user = USUARIOS_PRUEBA.find(
+    const usuarios = getStoredUsuarios();
+    const user = usuarios.find(
       (u) => u.username.toLowerCase() === username.trim().toLowerCase()
     );
 
-    if (!user || password !== 'password123') {
-      const err = new Error('Credenciales incorrectas. Verifique usuario o contraseña.');
+    if (!user || password !== user.password || user.activo === false) {
+      registrarAuditoriaMock('LOGIN_FALLIDO', { usuario: username.trim(), resultado: 'RECHAZADO' });
+      const err = new Error('Credenciales inválidas. Verifique su nombre de usuario y contraseña.');
       err.status = 401;
       throw err;
     }
+    user.ultimo_acceso = new Date().toISOString();
+    saveStoredUsuarios(usuarios);
 
     const token = `mock-jwt-token-for-${user.username}-${Date.now()}`;
     const userData = {
@@ -537,6 +594,7 @@ export const apiMock = {
     };
 
     localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(userData));
+    registrarAuditoriaMock('LOGIN_OK', { usuario: user.username, rol: user.rol });
     return {
       success: true,
       data: {
@@ -970,6 +1028,170 @@ export const apiMock = {
   },
 
   // 11. GET /api/reportes/resumen
+  // 20. POST /api/activos/:id/mantenimiento
+  async registrarMantenimiento(id, { tipo_mantenimiento, descripcion, fecha, estado_resultante, responsable, costo } = {}) {
+    await delay();
+    const currentUser = getSessionUser();
+    if (currentUser?.rol !== 'admin_ti') throw errorMock('Solo admin_ti puede registrar mantenciones.', 403);
+    if (!['Preventiva', 'Correctiva'].includes(tipo_mantenimiento)) throw errorMock('tipo_mantenimiento debe ser Preventiva o Correctiva.', 400);
+    if (!descripcion || !descripcion.trim()) throw errorMock('Describa el trabajo realizado.', 400);
+    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+    const fechaMant = fecha || hoy;
+    if (fechaMant > hoy) throw errorMock('La fecha de mantención no puede ser futura.', 400);
+
+    const lista = getStoredActivos();
+    const idx = lista.findIndex((a) => a.id_activo.toUpperCase() === id.toUpperCase());
+    if (idx === -1) throw errorMock(`Activo ${id} no encontrado.`, 404);
+    const activo = lista[idx];
+    if (activo.estado_operativo === 'De baja') throw errorMock('No se puede registrar mantención en un activo dado de baja.', 409);
+
+    const estadoAnterior = activo.estado_operativo;
+    const nuevoEstado = estado_resultante || estadoAnterior;
+    if (!activo.ultimo_mantenimiento || fechaMant >= activo.ultimo_mantenimiento) {
+      activo.ultimo_mantenimiento = fechaMant;
+      activo.tipo_mantenimiento = tipo_mantenimiento;
+    }
+    activo.estado_operativo = nuevoEstado;
+    lista[idx] = activo;
+    saveStoredActivos(lista);
+
+    const historial = getStoredHistorial();
+    historial.push({
+      id: Date.now(),
+      id_activo: activo.id_activo,
+      fecha: new Date().toISOString(),
+      tipo_evento: 'MANTENIMIENTO',
+      usuario: currentUser.nombre,
+      unidad_origen: activo.unidad,
+      unidad_destino: activo.unidad,
+      custodio_anterior: activo.custodio,
+      custodio_nuevo: activo.custodio,
+      motivo: `Mantención ${tipo_mantenimiento.toLowerCase()}: ${descripcion.trim()}`,
+      detalles: [
+        `Estado: ${estadoAnterior} -> ${nuevoEstado}`,
+        responsable ? `Responsable: ${responsable}` : null,
+        costo ? `Costo: $${Number(costo).toLocaleString('es-CL')} CLP` : null,
+        `Fecha de ejecución: ${fechaMant}`
+      ].filter(Boolean).join(' | ')
+    });
+    saveStoredHistorial(historial);
+    registrarAuditoriaMock('ESCRITURA POST', { metodo: 'POST', ruta: `/api/activos/${activo.id_activo}/mantenimiento` });
+
+    return {
+      success: true,
+      message: 'Mantención registrada en la bitácora.',
+      data: { id_activo: activo.id_activo, tipo_mantenimiento, ultimo_mantenimiento: activo.ultimo_mantenimiento, estado_operativo: nuevoEstado }
+    };
+  },
+
+  // PUT /api/auth/password (cambio de la propia contraseña)
+  async cambiarPassword({ password_actual, password_nueva }) {
+    await delay();
+    const sesion = getSessionUser();
+    const usuarios = getStoredUsuarios();
+    const u = usuarios.find((x) => x.id === sesion?.id);
+    if (!u || u.password !== password_actual) throw errorMock('La contraseña actual no es correcta.', 401);
+    const errorPolitica = validarPasswordMock(password_nueva);
+    if (errorPolitica) throw errorMock(errorPolitica, 400);
+    if (password_nueva === password_actual) throw errorMock('La nueva contraseña debe ser distinta de la actual.', 400);
+    u.password = password_nueva;
+    u.actualizado_en = new Date().toISOString();
+    saveStoredUsuarios(usuarios);
+    registrarAuditoriaMock('ESCRITURA PUT', { metodo: 'PUT', ruta: '/api/auth/password' });
+    return { success: true, message: 'Contraseña actualizada correctamente.' };
+  },
+
+  // GET /api/usuarios
+  async getUsuarios() {
+    await delay();
+    if (getSessionUser()?.rol !== 'admin_ti') throw errorMock('Solo admin_ti puede gestionar usuarios.', 403);
+    return { success: true, data: getStoredUsuarios().map(sinPassword) };
+  },
+
+  // POST /api/usuarios
+  async crearUsuario({ username, nombre, rol, unidad, password }) {
+    await delay();
+    if (getSessionUser()?.rol !== 'admin_ti') throw errorMock('Solo admin_ti puede gestionar usuarios.', 403);
+    if (!/^[a-z0-9._-]{3,30}$/.test(username || '')) throw errorMock('Nombre de usuario inválido (3-30: minúsculas, números, . _ -).', 400);
+    if (!nombre || !nombre.trim()) throw errorMock('El nombre es obligatorio.', 400);
+    if (!['admin_ti', 'jefatura', 'lectura'].includes(rol)) throw errorMock('Rol inválido.', 400);
+    if (!CATALOGOS.unidades.includes(unidad)) throw errorMock('Unidad inexistente en el catálogo.', 400);
+    const errorPolitica = validarPasswordMock(password);
+    if (errorPolitica) throw errorMock(errorPolitica, 400);
+    const usuarios = getStoredUsuarios();
+    if (usuarios.some((u) => u.username === username)) throw errorMock(`El nombre de usuario '${username}' ya existe.`, 409);
+    const nuevo = {
+      id: Math.max(...usuarios.map((u) => u.id)) + 1,
+      username, password, nombre: nombre.trim(), rol, unidad, activo: true,
+      creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString(), ultimo_acceso: null
+    };
+    usuarios.push(nuevo);
+    saveStoredUsuarios(usuarios);
+    registrarAuditoriaMock('USUARIO_CREADO', { detalle: `username=${username}; rol=${rol}; unidad=${unidad}` });
+    return { success: true, message: 'Usuario creado.', data: sinPassword(nuevo) };
+  },
+
+  // PUT /api/usuarios/:id
+  async actualizarUsuario(id, cambios = {}) {
+    await delay();
+    const sesion = getSessionUser();
+    if (sesion?.rol !== 'admin_ti') throw errorMock('Solo admin_ti puede gestionar usuarios.', 403);
+    const usuarios = getStoredUsuarios();
+    const u = usuarios.find((x) => x.id === Number(id));
+    if (!u) throw errorMock('Usuario no encontrado.', 404);
+    if (u.id === sesion.id && (cambios.activo === false || (cambios.rol && cambios.rol !== 'admin_ti'))) {
+      throw errorMock('No puede desactivar su propia cuenta ni quitarse el rol admin_ti.', 409);
+    }
+    const adminsActivos = usuarios.filter((x) => x.rol === 'admin_ti' && x.activo !== false).length;
+    const dejaDeSerAdmin = u.rol === 'admin_ti' && u.activo !== false &&
+      ((cambios.rol && cambios.rol !== 'admin_ti') || cambios.activo === false);
+    if (dejaDeSerAdmin && adminsActivos <= 1) throw errorMock('Debe existir al menos un administrador TI activo.', 409);
+    if (cambios.unidad && !CATALOGOS.unidades.includes(cambios.unidad)) throw errorMock('Unidad inexistente en el catálogo.', 400);
+
+    const antes = { ...u };
+    for (const campo of ['nombre', 'rol', 'unidad', 'activo']) {
+      if (cambios[campo] !== undefined) u[campo] = cambios[campo];
+    }
+    u.actualizado_en = new Date().toISOString();
+    saveStoredUsuarios(usuarios);
+    const accion = cambios.activo === false ? 'USUARIO_REVOCADO' : (cambios.activo === true && antes.activo === false ? 'USUARIO_REACTIVADO' : 'USUARIO_MODIFICADO');
+    registrarAuditoriaMock(accion, { detalle: `username=${u.username}` });
+    return { success: true, message: 'Usuario actualizado.', data: sinPassword(u) };
+  },
+
+  // PUT /api/usuarios/:id/password
+  async restablecerPassword(id, passwordNueva) {
+    await delay();
+    if (getSessionUser()?.rol !== 'admin_ti') throw errorMock('Solo admin_ti puede gestionar usuarios.', 403);
+    const errorPolitica = validarPasswordMock(passwordNueva);
+    if (errorPolitica) throw errorMock(errorPolitica, 400);
+    const usuarios = getStoredUsuarios();
+    const u = usuarios.find((x) => x.id === Number(id));
+    if (!u) throw errorMock('Usuario no encontrado.', 404);
+    u.password = passwordNueva;
+    u.actualizado_en = new Date().toISOString();
+    saveStoredUsuarios(usuarios);
+    registrarAuditoriaMock('USUARIO_PASSWORD_RESTABLECIDA', { detalle: `username=${u.username}` });
+    return { success: true, message: 'Contraseña restablecida.' };
+  },
+
+  // GET /api/auditoria
+  async getAuditoria({ usuario = '', accion = '', resultado = '', page = 1, limit = 50 } = {}) {
+    await delay();
+    const rol = getSessionUser()?.rol;
+    if (!['admin_ti', 'lectura'].includes(rol)) throw errorMock('Acceso restringido a Administración TI y Control.', 403);
+    let lista = [];
+    try { lista = JSON.parse(localStorage.getItem(STORAGE_KEY_AUDITORIA) || '[]'); } catch (e) { lista = []; }
+    lista = lista
+      .filter((e) => !usuario || e.usuario === usuario)
+      .filter((e) => !accion || (e.accion || '').startsWith(accion))
+      .filter((e) => !resultado || e.resultado === resultado)
+      .sort((a, b) => b.id - a.id);
+    const total = lista.length;
+    const inicio = (page - 1) * limit;
+    return { success: true, data: lista.slice(inicio, inicio + limit), meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  },
+
   async getReporteResumen() {
     await delay();
     let lista = getStoredActivos();
@@ -1436,6 +1658,8 @@ export const apiMock = {
   async resetDatos() {
     localStorage.removeItem(STORAGE_KEY_ACTIVOS);
     localStorage.removeItem(STORAGE_KEY_HISTORIAL);
+    localStorage.removeItem(STORAGE_KEY_USUARIOS);
+    localStorage.removeItem(STORAGE_KEY_AUDITORIA);
     initStorage();
     return true;
   }
