@@ -79,8 +79,26 @@ CREATE TABLE IF NOT EXISTS historial (
     custodio_nuevo TEXT,
     motivo TEXT,
     detalles TEXT,
-    FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE CASCADE
+    -- RESTRICT: un activo con historial no se puede eliminar físicamente (la baja es lógica,
+    -- vía estado_operativo = 'De baja'). Con CASCADE, borrar o reemplazar un activo
+    -- eliminaba en silencio toda su bitácora.
+    FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE RESTRICT
 );
+
+-- Bitácora inmutable (Ley N.º 21.459 / Ley N.º 20.285): solo se permite INSERT.
+-- Cualquier intento de modificar o borrar un evento se rechaza a nivel de base de datos,
+-- independiente de lo que haga la capa de aplicación.
+CREATE TRIGGER IF NOT EXISTS trg_historial_no_update
+BEFORE UPDATE ON historial
+BEGIN
+    SELECT RAISE(ABORT, 'La bitácora de historial es inmutable: no se permite modificar eventos.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_historial_no_delete
+BEFORE DELETE ON historial
+BEGIN
+    SELECT RAISE(ABORT, 'La bitácora de historial es inmutable: no se permite eliminar eventos.');
+END;
 
 -- Índices de Rendimiento para Búsquedas y Filtros
 CREATE INDEX IF NOT EXISTS idx_activos_categoria ON activos(categoria);

@@ -50,59 +50,87 @@ router.get('/catalogos', (req, res) => {
   });
 });
 
+// Zona horaria de la municipalidad: "hoy" debe ser la fecha local de Chile, no la UTC
+// (entre las 21:00 y medianoche la fecha UTC ya es el día siguiente).
+const ZONA_HORARIA = process.env.APP_TZ || 'America/Santiago';
+const DIAS_ALERTA_DEFAULT = 60;
+const DIAS_ALERTA_MAX = 3650;
+
+function fechaHoyLocal() {
+  // 'sv-SE' formatea como YYYY-MM-DD
+  return new Date().toLocaleDateString('sv-SE', { timeZone: ZONA_HORARIA });
+}
+
 /**
  * Endpoint 5: GET /api/alertas?dias=60
- * Garantías y licencias por vencer
+ * Garantías (hardware) y licencias (software) por vencer dentro de los próximos `dias` días.
+ * - Los activos 'De baja' no generan alertas.
+ * - Los activos de categoría 'Software' se informan como licencias, no como garantías
+ *   (mismo criterio que frontend/src/api.mock.js).
+ * - dias_restantes es la diferencia exacta en días calendario respecto de hoy (0 = vence hoy).
  */
 router.get('/alertas', aplicarFiltroUnidad, (req, res) => {
-  const dias = parseInt(req.query.dias, 10) || 60;
-  const hoy = new Date().toISOString().split('T')[0];
+  let dias = DIAS_ALERTA_DEFAULT;
+  if (req.query.dias !== undefined && req.query.dias !== '') {
+    dias = Number(req.query.dias);
+    if (!Number.isInteger(dias) || dias < 0 || dias > DIAS_ALERTA_MAX) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'BAD_REQUEST',
+          message: `El parámetro 'dias' debe ser un entero entre 0 y ${DIAS_ALERTA_MAX}.`,
+          details: [{ campo: 'dias', valor: req.query.dias }]
+        }
+      });
+    }
+  }
 
-  // Calcular fecha límite
-  const fechaLimite = new Date();
-  fechaLimite.setDate(fechaLimite.getDate() + dias);
-  const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
+  const hoy = fechaHoyLocal();
+  const esJefatura = req.user.rol === 'jefatura';
 
   let sqlGarantias = `
     SELECT
       id_activo, marca_modelo, categoria, unidad, custodio, fecha_garantia, proveedor,
-      CAST((julianday(fecha_garantia) - julianday('now')) AS INTEGER) AS dias_restantes
+      CAST(julianday(fecha_garantia) - julianday(@hoy) AS INTEGER) AS dias_restantes
     FROM activos
-    WHERE fecha_garantia >= ? AND fecha_garantia <= ?
+    WHERE categoria <> 'Software'
+      AND estado_operativo <> 'De baja'
+      AND fecha_garantia BETWEEN @hoy AND date(@hoy, '+' || @dias || ' days')
   `;
-  const params = [hoy, fechaLimiteStr];
+  if (esJefatura) sqlGarantias += ' AND unidad = @unidad';
+  sqlGarantias += ' ORDER BY fecha_garantia ASC, id_activo ASC';
 
-  // Restricción por rol de jefatura
-  if (req.user.rol === 'jefatura') {
-    sqlGarantias += ' AND unidad = ?';
-    params.push(req.user.unidad);
-  }
-
-  sqlGarantias += ' ORDER BY fecha_garantia ASC';
-
-  const garantias = db.prepare(sqlGarantias).all(...params);
-
-  // Licencias por vencer
+  // Licencias: los activos de software (su fecha_garantia es el vencimiento de la
+  // suscripción/soporte) + licencias adicionales registradas en la tabla `licencias`
+  // que no correspondan a un activo de software ya contado.
   let sqlLicencias = `
-    SELECT
-      id_activo, nombre_software, unidad, fecha_vencimiento, costo_renovacion,
-      CAST((julianday(fecha_vencimiento) - julianday('now')) AS INTEGER) AS dias_restantes
-    FROM licencias
-    WHERE fecha_vencimiento >= ? AND fecha_vencimiento <= ?
+    SELECT * FROM (
+      SELECT
+        a.id_activo, a.marca_modelo AS nombre_software, a.unidad,
+        a.fecha_garantia AS fecha_vencimiento, a.costo_anual AS costo_renovacion
+      FROM activos a
+      WHERE a.categoria = 'Software' AND a.estado_operativo <> 'De baja'
+      UNION ALL
+      SELECT
+        l.id_activo, l.nombre_software, l.unidad, l.fecha_vencimiento, l.costo_renovacion
+      FROM licencias l
+      LEFT JOIN activos a ON a.id_activo = l.id_activo
+      WHERE a.id_activo IS NULL
+         OR (a.categoria <> 'Software' AND a.estado_operativo <> 'De baja')
+    )
+    WHERE fecha_vencimiento BETWEEN @hoy AND date(@hoy, '+' || @dias || ' days')
   `;
-  const licParams = [hoy, fechaLimiteStr];
-  if (req.user.rol === 'jefatura') {
-    sqlLicencias += ' AND unidad = ?';
-    licParams.push(req.user.unidad);
-  }
-  sqlLicencias += ' ORDER BY fecha_vencimiento ASC';
+  if (esJefatura) sqlLicencias += ' AND unidad = @unidad';
 
-  let licencias = [];
-  try {
-    licencias = db.prepare(sqlLicencias).all(...licParams);
-  } catch (e) {
-    licencias = [];
-  }
+  const params = { hoy, dias, unidad: esJefatura ? req.user.unidad : null };
+  const garantias = db.prepare(sqlGarantias).all(params);
+  const licencias = db
+    .prepare(`
+      SELECT *, CAST(julianday(fecha_vencimiento) - julianday(@hoy) AS INTEGER) AS dias_restantes
+      FROM (${sqlLicencias})
+      ORDER BY fecha_vencimiento ASC, id_activo ASC
+    `)
+    .all(params);
 
   return res.status(200).json({
     success: true,
@@ -127,33 +155,34 @@ router.get('/activos', aplicarFiltroUnidad, (req, res) => {
   const conditions = [];
   const params = [];
 
-  // Filtro de búsqueda libre
-  if (q && q.trim()) {
+  // Filtro de búsqueda libre. Se escapan los comodines de LIKE (% y _) para que el
+  // usuario busque el texto literal (antes q=% devolvía todo el inventario).
+  if (typeof q === 'string' && q.trim()) {
     conditions.push(`(
-      id_activo LIKE ? OR
-      marca_modelo LIKE ? OR
-      custodio LIKE ? OR
-      ubicacion LIKE ? OR
-      descripcion LIKE ?
+      id_activo LIKE ? ESCAPE '\\' OR
+      marca_modelo LIKE ? ESCAPE '\\' OR
+      custodio LIKE ? ESCAPE '\\' OR
+      ubicacion LIKE ? ESCAPE '\\' OR
+      descripcion LIKE ? ESCAPE '\\'
     )`);
-    const term = `%${q.trim()}%`;
+    const term = `%${q.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     params.push(term, term, term, term, term);
   }
 
   // Filtro por categoría
-  if (categoria && categoria.trim()) {
+  if (typeof categoria === 'string' && categoria.trim()) {
     conditions.push('categoria = ?');
     params.push(categoria.trim());
   }
 
   // Filtro por estado operativo
-  if (estado && estado.trim()) {
+  if (typeof estado === 'string' && estado.trim()) {
     conditions.push('estado_operativo = ?');
     params.push(estado.trim());
   }
 
   // Filtro por unidad: Jefatura SIEMPRE ve únicamente su propia unidad institucional
-  const unidadFiltro = req.filtroUnidad || (req.user && req.user.rol === 'jefatura' ? req.user.unidad : (unidad && unidad.trim()));
+  const unidadFiltro = req.filtroUnidad || (req.user && req.user.rol === 'jefatura' ? req.user.unidad : (typeof unidad === 'string' && unidad.trim()));
   if (unidadFiltro) {
     conditions.push('unidad = ?');
     params.push(unidadFiltro);

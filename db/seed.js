@@ -3,7 +3,29 @@
  * Ilustre Municipalidad de San Pablo - Plan Informático Municipal 2027-2031
  * Cumple con docs/contrato-api.md y la distribución del informe:
  * 64 PC, 18 Impresoras, 14 Equipos de red, 2 Servidores y 8 Aplicaciones
+ *
+ * Responsable: Alfredo
+ *
+ * Uso:
+ *   npm run seed          -> Idempotente. Inserta solo los activos que falten y NUNCA
+ *                            modifica activos existentes ni toca eventos ya registrados
+ *                            en la bitácora. Se puede ejecutar cuantas veces se quiera.
+ *   npm run seed:reset    -> Elimina el archivo de base de datos y la recrea desde cero
+ *                            (útil para volver al estado inicial antes de una demo).
  */
+
+const path = require('path');
+const fs = require('fs');
+
+// --reset: borrar el archivo SQLite ANTES de abrir la conexión. La bitácora es inmutable
+// (triggers en schema.sql), por lo que la única forma legítima de reiniciar es partir de cero.
+if (process.argv.includes('--reset')) {
+  const dbPath = process.env.DB_PATH || path.join(__dirname, 'inventario.db');
+  for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+    if (fs.existsSync(f)) fs.unlinkSync(f);
+  }
+  console.log(`[RESET] Base de datos eliminada: ${dbPath}`);
+}
 
 const db = require('./database');
 
@@ -1440,7 +1462,7 @@ function seedDatabase() {
     "id_activo": "SP-HW-0016",
     "categoria": "PC",
     "marca_modelo": "HP Compaq Pro 6300 Legacy",
-    "descripcion": "Equipo Escritorio Corporativo Intel Core i5, 16GB RAM, SSD 512GB",
+    "descripcion": "Equipo Escritorio Legacy Intel Core i5-3470, 4GB RAM, HDD 500GB",
     "ubicacion": "Taller Municipal",
     "unidad": "Aseo y Ornato",
     "custodio": "Mario Antillanca",
@@ -1449,11 +1471,11 @@ function seedDatabase() {
     "tipo_mantenimiento": "Preventiva",
     "criticidad": "Media",
     "proceso_asociado": "Operación General",
-    "fecha_adquisicion": "2024-03-15",
+    "fecha_adquisicion": "2013-05-10",
     "fecha_garantia": "2016-05-10",
-    "licencias_asociadas": "Windows 11 Pro OEM, Microsoft Office 2021 Hogar y Empresas",
+    "licencias_asociadas": "Windows 7 Professional OEM, Microsoft Office 2010",
     "proveedor": "Proveedor TI Sur Ltda.",
-    "contrato_oc": "OC 4521-10-SE24",
+    "contrato_oc": "OC 4521-05-SE13",
     "costo_inicial": 590000,
     "costo_anual": 0,
     "configuracion_red": "192.168.26.26 / VLAN 20 / Win 11 Pro 22H2 BitLocker: ON",
@@ -1600,7 +1622,7 @@ function seedDatabase() {
     "criticidad": "Media",
     "proceso_asociado": "Proceso A (Solicitudes)",
     "fecha_adquisicion": "2025-01-20",
-    "fecha_garantia": "2016-05-10",
+    "fecha_garantia": "2027-04-20",
     "licencias_asociadas": "Windows 11 Pro OEM, Microsoft Office 2021 Hogar y Empresas",
     "proveedor": "Proveedor TI Sur Ltda.",
     "contrato_oc": "OC 4521-16-SE24",
@@ -2663,8 +2685,12 @@ function seedDatabase() {
   }
 ];
 
+  // INSERT ... ON CONFLICT DO NOTHING (antes: INSERT OR REPLACE).
+  // REPLACE borra la fila y la vuelve a insertar, lo que disparaba el ON DELETE CASCADE
+  // del historial y eliminaba toda la bitácora en cada ejecución del seed. Además
+  // sobrescribía cambios reales hechos desde la aplicación (traslados, bajas, ediciones).
   const insertActivo = db.prepare(`
-    INSERT OR REPLACE INTO activos (
+    INSERT INTO activos (
       id_activo, categoria, marca_modelo, descripcion, ubicacion, unidad, custodio,
       estado_operativo, ultimo_mantenimiento, tipo_mantenimiento, criticidad, proceso_asociado,
       fecha_adquisicion, fecha_garantia, licencias_asociadas, proveedor, contrato_oc,
@@ -2675,32 +2701,113 @@ function seedDatabase() {
       @fecha_adquisicion, @fecha_garantia, @licencias_asociadas, @proveedor, @contrato_oc,
       @costo_inicial, @costo_anual, @configuracion_red, @fecha_revision, @responsable_revision, @motivo_baja
     )
+    ON CONFLICT(id_activo) DO NOTHING
   `);
 
   const insertHistorial = db.prepare(`
     INSERT INTO historial (
       id_activo, fecha, tipo_evento, usuario, unidad_origen, unidad_destino, custodio_anterior, custodio_nuevo, motivo, detalles
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      @id_activo, @fecha, @tipo_evento, @usuario, @unidad_origen, @unidad_destino, @custodio_anterior, @custodio_nuevo, @motivo, @detalles
     )
   `);
 
+  const existeEvento = db.prepare(
+    'SELECT 1 FROM historial WHERE id_activo = ? AND tipo_evento = ? AND fecha = ? LIMIT 1'
+  );
+  const existeTipoEvento = db.prepare(
+    'SELECT 1 FROM historial WHERE id_activo = ? AND tipo_evento = ? LIMIT 1'
+  );
+
+  const RESPONSABLE_TI = 'Felipe Oyarzún Mansilla';
+
+  // Eventos históricos documentados (casos de ejemplo del informe). El estado final de
+  // cada activo en activosData debe ser coherente con la secuencia de eventos.
+  const eventosDocumentados = [
+    {
+      id_activo: 'SP-HW-0003', fecha: '2024-03-15T10:00:00Z', tipo_evento: 'ALTA', usuario: RESPONSABLE_TI,
+      unidad_origen: null, unidad_destino: 'DIDECO - Equipo Territorial Quilacahuín',
+      custodio_anterior: null, custodio_nuevo: 'Claudia Silva Méndez',
+      motivo: 'Alta inicial de equipamiento Plan Informático',
+      detalles: 'Ingreso al inventario general con verificación física y etiquetado con código de barra.'
+    },
+    {
+      id_activo: 'SP-HW-0003', fecha: '2026-04-12T15:30:00Z', tipo_evento: 'TRASLADO', usuario: RESPONSABLE_TI,
+      unidad_origen: 'DIDECO - Equipo Territorial Quilacahuín', unidad_destino: 'DIDECO - Dirección San Pablo',
+      custodio_anterior: 'Claudia Silva Méndez', custodio_nuevo: 'Marcela Huenchumán Soto',
+      motivo: 'Reasignación a Dirección DIDECO tras término de operativo social en terreno sector rural',
+      detalles: 'Entrega con acta de responsabilidad firmada conforme a Ley 18.695.'
+    },
+    {
+      id_activo: 'SP-HW-0016', fecha: '2026-07-20T11:15:00Z', tipo_evento: 'BAJA', usuario: RESPONSABLE_TI,
+      unidad_origen: 'Aseo y Ornato', unidad_destino: 'Aseo y Ornato',
+      custodio_anterior: 'Mario Antillanca', custodio_nuevo: null,
+      motivo: 'Equipo legacy con falla en placa madre no reparable',
+      detalles: 'Baja decretada según Informe Técnico TI N° 04-2026. Almacenado en bodega para enajenación.'
+    }
+  ];
+
+  const resumen = { activosNuevos: 0, activosExistentes: 0, eventosNuevos: 0 };
+
+  const registrarEvento = (evento) => {
+    insertHistorial.run(evento);
+    resumen.eventosNuevos += 1;
+  };
+
   const runSeed = db.transaction(() => {
+    // 1. Activos: solo se insertan los que no existen
     for (const activo of activosData) {
-      insertActivo.run(activo);
+      const r = insertActivo.run(activo);
+      if (r.changes > 0) resumen.activosNuevos += 1;
+      else resumen.activosExistentes += 1;
     }
 
-    // Historial inicial
-    const countHistorial = db.prepare('SELECT COUNT(*) AS total FROM historial').get().total;
-    if (countHistorial === 0) {
-      insertHistorial.run('SP-HW-0003', '2025-01-15T10:00:00Z', 'ALTA', 'Felipe Oyarzún Mansilla', null, 'DIDECO', null, 'Marcela Huenchumán Soto', 'Alta inicial de equipamiento Plan Informático', 'Ingreso al inventario general con verificación física y etiquetado con código de barra.');
-      insertHistorial.run('SP-HW-0003', '2026-04-12T15:30:00Z', 'TRASLADO', 'Felipe Oyarzún Mansilla', 'DIDECO Central', 'DIDECO - Equipo Territorial Quilacahuín', 'Marcela Huenchumán Soto', 'Claudia Silva Méndez', 'Reasignación a operativo social en terreno sector rural', 'Entrega en terreno con acta de responsabilidad firmada conforme a Ley 18.695.');
-      insertHistorial.run('SP-HW-0016', '2026-07-20T11:15:00Z', 'BAJA', 'Felipe Oyarzún Mansilla', 'Aseo y Ornato', 'Aseo y Ornato', 'Mario Antillanca', null, 'Equipo legacy con falla en placa madre no reparable', 'Baja decretada según Informe Técnico TI N° 04-2026. Almacenado en bodega para enajenación.');
+    // 2. Eventos documentados (no se duplican si ya existen)
+    for (const ev of eventosDocumentados) {
+      if (!existeEvento.get(ev.id_activo, ev.tipo_evento, ev.fecha)) registrarEvento(ev);
+    }
+
+    // 3. Cada activo del inventario inicial debe tener su evento ALTA en la bitácora,
+    //    y cada activo dado de baja su evento BAJA, para que la trazabilidad esté completa.
+    for (const a of activosData) {
+      if (!existeTipoEvento.get(a.id_activo, 'ALTA')) {
+        registrarEvento({
+          id_activo: a.id_activo,
+          fecha: `${a.fecha_adquisicion}T09:00:00Z`,
+          tipo_evento: 'ALTA',
+          usuario: a.responsable_revision || RESPONSABLE_TI,
+          unidad_origen: null,
+          unidad_destino: a.unidad,
+          custodio_anterior: null,
+          custodio_nuevo: a.custodio,
+          motivo: `Recepción conforme ${a.contrato_oc}`,
+          detalles: `Incorporación al inventario inicial del Plan Informático. Ubicación: ${a.ubicacion}.`
+        });
+      }
+
+      if (a.estado_operativo === 'De baja' && !existeTipoEvento.get(a.id_activo, 'BAJA')) {
+        registrarEvento({
+          id_activo: a.id_activo,
+          fecha: `${a.fecha_revision || a.ultimo_mantenimiento || a.fecha_adquisicion}T12:00:00Z`,
+          tipo_evento: 'BAJA',
+          usuario: a.responsable_revision || RESPONSABLE_TI,
+          unidad_origen: a.unidad,
+          unidad_destino: a.unidad,
+          custodio_anterior: a.custodio,
+          custodio_nuevo: null,
+          motivo: a.motivo_baja,
+          detalles: 'Baja registrada durante la validación del inventario inicial.'
+        });
+      }
     }
   });
 
   runSeed();
-  console.log('Seed completado exitosamente: ' + activosData.length + ' activos insertados.');
+  console.log(
+    `Seed completado: ${resumen.activosNuevos} activos insertados, ` +
+    `${resumen.activosExistentes} ya existían (no se modificaron), ` +
+    `${resumen.eventosNuevos} eventos nuevos en bitácora.`
+  );
 }
 
 if (require.main === module) {
