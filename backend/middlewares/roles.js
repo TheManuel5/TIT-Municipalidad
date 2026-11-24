@@ -90,11 +90,12 @@ function sanitizarActivo(activo, rol) {
   }
 
   // Si es jefatura o lectura, se enmascaran los campos reservados
-  return {
-    ...activo,
-    criticidad: '[RESERVADO]',
-    configuracion_red: '[RESERVADO - Ley N.º 21.663]'
-  };
+  // Solo se enmascaran los campos que el objeto realmente trae: así no se agregan campos
+  // falsos a respuestas que no son activos (auditoría, usuarios, reportes, conciliaciones).
+  const sanitizado = { ...activo };
+  if ('criticidad' in sanitizado) sanitizado.criticidad = '[RESERVADO]';
+  if ('configuracion_red' in sanitizado) sanitizado.configuracion_red = '[RESERVADO - Ley N.º 21.663]';
+  return sanitizado;
 }
 
 /**

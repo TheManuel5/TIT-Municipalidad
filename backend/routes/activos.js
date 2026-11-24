@@ -424,6 +424,17 @@ router.post('/:id/traslado', soloAdminTI, (req, res) => {
     });
   }
 
+  if (activoActual.estado_operativo === 'De baja') {
+    return res.status(409).json({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+        message: `No se puede trasladar el activo '${id}': está dado de baja.`,
+        details: []
+      }
+    });
+  }
+
   const updateTraslado = db.prepare(`
     UPDATE activos SET
       unidad = ?,
@@ -521,6 +532,17 @@ router.post('/:id/baja', soloAdminTI, (req, res) => {
     });
   }
 
+  if (activoActual.estado_operativo === 'De baja') {
+    return res.status(409).json({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+        message: `El activo '${id}' ya se encuentra dado de baja.`,
+        details: []
+      }
+    });
+  }
+
   const updateBaja = db.prepare(`
     UPDATE activos SET
       estado_operativo = 'De baja',
@@ -580,6 +602,113 @@ router.post('/:id/baja', soloAdminTI, (req, res) => {
       }
     });
   }
+});
+
+/**
+ * Endpoint 20: POST /api/activos/:id/mantenimiento
+ * Registro de una mantención preventiva o correctiva (RF-2: trazabilidad de mantenciones).
+ * Responsable: Alfredo (agregado para cubrir el evento MANTENIMIENTO de la bitácora)
+ *
+ * Body: {
+ *   tipo_mantenimiento: 'Preventiva' | 'Correctiva'   (obligatorio)
+ *   descripcion: string                                (obligatorio: qué se hizo)
+ *   fecha?: 'YYYY-MM-DD'                               (por defecto hoy; no puede ser futura)
+ *   estado_resultante?: 'Bueno' | 'Regular' | 'Malo' | 'En reparación'
+ *   responsable?: string                               (técnico o proveedor que la realizó)
+ *   costo?: number                                     (CLP, informativo)
+ * }
+ * Actualiza ultimo_mantenimiento, tipo_mantenimiento y (opcional) estado_operativo,
+ * y registra el evento MANTENIMIENTO en la bitácora inmutable.
+ */
+router.post('/:id/mantenimiento', soloAdminTI, (req, res) => {
+  const { id } = req.params;
+  const { tipo_mantenimiento, descripcion, fecha, estado_resultante, responsable, costo } = req.body || {};
+  const TIPOS = ['Preventiva', 'Correctiva'];
+  const ESTADOS_RESULTANTES = ['Bueno', 'Regular', 'Malo', 'En reparación'];
+  const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: process.env.APP_TZ || 'America/Santiago' });
+  const errores = [];
+
+  if (!TIPOS.includes(tipo_mantenimiento)) {
+    errores.push({ campo: 'tipo_mantenimiento', mensaje: `Debe ser: ${TIPOS.join(' o ')}.` });
+  }
+  if (typeof descripcion !== 'string' || !descripcion.trim()) {
+    errores.push({ campo: 'descripcion', mensaje: 'Describa el trabajo realizado.' });
+  }
+  const fechaMant = fecha === undefined || fecha === '' ? hoy : fecha;
+  if (typeof fechaMant !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fechaMant) || Number.isNaN(Date.parse(fechaMant))) {
+    errores.push({ campo: 'fecha', mensaje: 'Formato YYYY-MM-DD.' });
+  } else if (fechaMant > hoy) {
+    errores.push({ campo: 'fecha', mensaje: 'La fecha de mantención no puede ser futura.' });
+  }
+  if (estado_resultante !== undefined && estado_resultante !== '' && !ESTADOS_RESULTANTES.includes(estado_resultante)) {
+    errores.push({ campo: 'estado_resultante', mensaje: `Debe ser: ${ESTADOS_RESULTANTES.join(', ')}. Para dar de baja use el endpoint de baja.` });
+  }
+  if (costo !== undefined && costo !== '' && (typeof costo !== 'number' || !Number.isFinite(costo) || costo < 0)) {
+    errores.push({ campo: 'costo', mensaje: 'Debe ser un número mayor o igual a 0.' });
+  }
+
+  if (errores.length) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'BAD_REQUEST', message: 'Datos de mantención inválidos.', details: errores }
+    });
+  }
+
+  const activo = db.prepare('SELECT * FROM activos WHERE id_activo = ?').get(id);
+  if (!activo) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: `Activo con identificador '${id}' no encontrado.`, details: [] }
+    });
+  }
+  if (activo.estado_operativo === 'De baja') {
+    return res.status(409).json({
+      success: false,
+      error: { code: 'CONFLICT', message: 'No se puede registrar mantención en un activo dado de baja.', details: [] }
+    });
+  }
+
+  const nuevoEstado = estado_resultante || activo.estado_operativo;
+  // Si ya hay una mantención más reciente registrada, no se retrocede la fecha
+  const ultimo = !activo.ultimo_mantenimiento || fechaMant >= activo.ultimo_mantenimiento;
+
+  const detalles = [
+    `Estado: ${activo.estado_operativo} -> ${nuevoEstado}`,
+    responsable ? `Responsable: ${String(responsable).trim()}` : null,
+    costo !== undefined && costo !== '' ? `Costo: $${Number(costo).toLocaleString('es-CL')} CLP` : null,
+    `Fecha de ejecución: ${fechaMant}`
+  ].filter(Boolean).join(' | ');
+
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE activos SET
+        ultimo_mantenimiento = CASE WHEN @ultimo THEN @fecha ELSE ultimo_mantenimiento END,
+        tipo_mantenimiento   = CASE WHEN @ultimo THEN @tipo ELSE tipo_mantenimiento END,
+        estado_operativo     = @estado
+      WHERE id_activo = @id
+    `).run({ ultimo: ultimo ? 1 : 0, fecha: fechaMant, tipo: tipo_mantenimiento, estado: nuevoEstado, id });
+
+    db.prepare(`
+      INSERT INTO historial (id_activo, fecha, tipo_evento, usuario, unidad_origen, unidad_destino,
+                             custodio_anterior, custodio_nuevo, motivo, detalles)
+      VALUES (?, ?, 'MANTENIMIENTO', ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, new Date().toISOString(), req.user.nombre || req.user.username,
+      activo.unidad, activo.unidad, activo.custodio, activo.custodio,
+      `Mantención ${tipo_mantenimiento.toLowerCase()}: ${descripcion.trim()}`, detalles
+    );
+  })();
+
+  return res.status(201).json({
+    success: true,
+    message: 'Mantención registrada en la bitácora.',
+    data: {
+      id_activo: id,
+      tipo_mantenimiento,
+      ultimo_mantenimiento: ultimo ? fechaMant : activo.ultimo_mantenimiento,
+      estado_operativo: nuevoEstado
+    }
+  });
 });
 
 module.exports = router;

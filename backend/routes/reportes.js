@@ -8,7 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const { verificarToken } = require('../middlewares/auth');
-const { aplicarFiltroUnidad } = require('../middlewares/roles');
+const { aplicarFiltroUnidad, sanitizarActivos } = require('../middlewares/roles');
 const db = require('../../db/database');
 const { fechaHoyLocal, leerDias, obtenerAlertas } = require('../utils/alertas');
 
@@ -221,7 +221,13 @@ router.get(['/exportar', '/reportes/exportar'], aplicarFiltroUnidad, (req, res) 
     params.push(req.user.unidad);
   }
 
-  const activos = db.prepare(`SELECT * FROM activos ${filterSql} ORDER BY id_activo ASC`).all(...params);
+  // Seguridad (Alfredo): el middleware global de sanitización solo actúa sobre respuestas JSON;
+  // aquí se enmascaran explícitamente los campos reservados para que el CSV de jefatura y
+  // lectura no exponga criticidad ni IP/VLAN (Ley N.º 21.663).
+  const activos = sanitizarActivos(
+    db.prepare(`SELECT * FROM activos ${filterSql} ORDER BY id_activo ASC`).all(...params),
+    req.user.rol
+  );
 
   if (formato === 'json') {
     return res.status(200).json({
@@ -240,7 +246,11 @@ router.get(['/exportar', '/reportes/exportar'], aplicarFiltroUnidad, (req, res) 
     const values = headers.map((header) => {
       let val = activo[header];
       if (val === null || val === undefined) val = '';
-      val = String(val).replace(/"/g, '""');
+      val = String(val);
+      // Neutraliza inyección de fórmulas (CSV injection): Excel ejecutaría celdas que
+      // empiezan con = + - @ o tabulación/retorno. Se antepone un apóstrofo.
+      if (/^[=+\-@\t\r]/.test(val)) val = `'${val}`;
+      val = val.replace(/"/g, '""');
       return `"${val}"`;
     });
     csvRows.push(values.join(','));

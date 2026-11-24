@@ -28,7 +28,8 @@ function numeroNoNegativo(valor) {
   return Number.isFinite(numero) && numero >= 0 ? numero : null;
 }
 
-router.post(['/importar', '/'], soloAdmin, (req, res) => {
+// Solo /importar: el alias '/' hacía que un POST /api a secas ejecutara una importación.
+router.post('/importar', soloAdmin, (req, res) => {
   const filas = req.body && req.body.filas;
   if (!Array.isArray(filas) || filas.length === 0) {
     return res.status(400).json({

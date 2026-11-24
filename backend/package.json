@@ -8,17 +8,24 @@
     "dev": "node --watch server.js",
     "seed": "node ../db/seed.js",
     "seed:reset": "node ../db/seed.js --reset",
-    "test": "node --test tests/db.test.js tests/consultas.test.js tests/reportes-importar.test.js tests/conciliaciones.test.js"
+    "test": "node --test tests/db.test.js tests/consultas.test.js tests/reportes-importar.test.js tests/conciliaciones.test.js tests/escrituras.test.js tests/seguridad.test.js tests/respaldos.test.js",
+    "backup": "node ../db/backup.js crear",
+    "backup:listar": "node ../db/backup.js listar",
+    "backup:verificar": "node ../db/backup.js verificar",
+    "backup:restaurar": "node ../db/backup.js restaurar"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.2.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.10",
     "express": "^5.3.0",
+    "express-rate-limit": "^8.7.5",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3"
   }
 }
