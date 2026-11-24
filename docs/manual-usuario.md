@@ -200,6 +200,10 @@ Se abre con el botón **Ficha** o **Ver Ficha**.
 - **Presupuesto y TCO:** proveedor, orden de compra o contrato, costo inicial y costo anual recurrente.
 - **Seguridad y Red (Ley 21.663):** nivel de criticidad y configuración de red. **Solo visible para el Administrador TI**; los demás perfiles ven *"Campo Reservado (Solo Admin TI)"*.
 
+![Ficha vista por Jefatura: criticidad y red reservadas](img/manual/21-jefatura-ficha.jpg)
+
+*Así ve la ficha una Jefatura: el bloque Seguridad y Red aparece como "Restringido".*
+
 ![Bitácora de trazabilidad](img/manual/07-ficha-bitacora.jpg)
 
 **Bitácora de Trazabilidad e Historial del Ciclo de Vida:** al final de la ficha aparecen todos los eventos del activo, del más reciente al más antiguo:
