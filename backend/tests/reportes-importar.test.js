@@ -165,13 +165,13 @@ describe('Importación de activos', () => {
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activos WHERE id_activo = 'SP-GAB-9012'").get().n, 0);
   });
 
-  test('rechaza costos vacíos, iguales a cero o negativos en la importación', async () => {
+  test('rechaza costos vacíos o negativos y acepta 0 en la importación', async () => {
     const r = await api.request('POST', '/importar', {
       token: admin,
       body: {
         recepcion_verificada: true,
         filas: [
-          { ...fila('SP-GAB-COST-9014'), costo_inicial: 0 },
+          { ...fila('SP-GAB-COST-9014'), costo_anual: 0 },
           { ...fila('SP-GAB-COST-9015'), costo_anual: -1 },
           { ...fila('SP-GAB-COST-9016'), costo_anual: '' }
         ]
@@ -179,10 +179,9 @@ describe('Importación de activos', () => {
     });
 
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body.data.resumen, { total_procesadas: 3, validas: 0, con_error: 3 });
-    assert.match(r.body.data.filas_invalidas[0].error, /costo_inicial debe ser un número mayor que 0/);
-    assert.match(r.body.data.filas_invalidas[1].error, /costo_anual debe ser un número mayor que 0/);
-    assert.match(r.body.data.filas_invalidas[2].error, /costo_anual debe ser un número mayor que 0/);
+    assert.deepEqual(r.body.data.resumen, { total_procesadas: 3, validas: 1, con_error: 2 });
+    assert.match(r.body.data.filas_invalidas[0].error, /costo_anual es obligatorio y debe ser un número mayor o igual a 0/);
+    assert.match(r.body.data.filas_invalidas[1].error, /costo_anual es obligatorio y debe ser un número mayor o igual a 0/);
   });
 
   test('admite importaciones mayores al límite JSON general', async () => {

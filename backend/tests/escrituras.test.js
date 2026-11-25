@@ -116,10 +116,10 @@ describe('Alta (Endpoint 7)', () => {
     assert.ok(proveedorNulo.body.error.details.some((detalle) => detalle.campo === 'proveedor'));
   });
 
-  test('exige costos inicial y anual mayores que cero', async () => {
+  test('exige costos inicial y anual (0 permitido, negativos y vacíos no)', async () => {
     let id = 210;
     for (const campo of ['costo_inicial', 'costo_anual']) {
-      for (const valor of [0, -1]) {
+      for (const valor of [-1, '', null]) {
         const r = await post('/activos', admin, {
           ...NUEVO,
           id_activo: `SP-HW-${id++}`,
@@ -129,9 +129,12 @@ describe('Alta (Endpoint 7)', () => {
       }
     }
 
-    const sinCostoAnual = { ...NUEVO, id_activo: 'SP-HW-0214' };
+    const sinCostoAnual = { ...NUEVO, id_activo: 'SP-HW-0216' };
     delete sinCostoAnual.costo_anual;
     assert.equal((await post('/activos', admin, sinCostoAnual)).status, 400);
+
+    const sinCostoRecurrente = await post('/activos', admin, { ...NUEVO, id_activo: 'SP-HW-0217', costo_anual: 0 });
+    assert.equal(sinCostoRecurrente.status, 201, 'un equipo sin costo recurrente (costo_anual = 0) es válido');
   });
 });
 
@@ -147,13 +150,21 @@ describe('Edición (Endpoint 8)', () => {
     assert.equal((await put('/activos/SP-XX-0000', admin, { estado_operativo: 'Regular' })).status, 404);
   });
 
-  test('rechaza costos inicial o anual en cero o negativos', async () => {
+  test('rechaza costos negativos o vacíos', async () => {
     for (const campo of ['costo_inicial', 'costo_anual']) {
-      for (const valor of [0, -1]) {
+      for (const valor of [-1, '', null]) {
         const r = await put('/activos/SP-HW-0200', admin, { [campo]: valor });
         assert.equal(r.status, 400, `${campo}=${valor}`);
       }
     }
+  });
+
+  test('permite guardar la ficha completa de un activo con costo anual 0 (regresión)', async () => {
+    const ficha = db.prepare("SELECT * FROM activos WHERE id_activo = 'SP-HW-0042'").get();
+    assert.equal(ficha.costo_anual, 0);
+    const { id_activo, ...resto } = ficha;
+    const r = await put('/activos/SP-HW-0042', admin, { ...resto, estado_operativo: 'Regular' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
   });
 });
 
