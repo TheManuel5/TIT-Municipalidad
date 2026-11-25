@@ -84,7 +84,7 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
   const { totales, por_categoria, por_estado, por_unidad } = resumen;
   const totalGarantiasAlertas = (alertas?.garantias_por_vencer?.length || 0) + (alertas?.licencias_por_vencer?.length || 0);
 
-  // Cálculo de KPIs según Tabla 5 del Informe
+  // Cálculo de KPIs del Plan Informático
   const kpiOE1 = totales.porcentaje_activos_validados;
   const metaOE1Cumplida = kpiOE1 >= 95;
   const kpiGarantiasVigentes = Math.round(((totales.total_activos - totalGarantiasAlertas) / totales.total_activos) * 100);
@@ -186,12 +186,12 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
         </div>
       </div>
 
-      {/* SECCIÓN 1: TABLERO DE CUMPLIMIENTO DE OBJETIVOS (TABLA 5 DEL INFORME) */}
+      {/* SECCIÓN 1: TABLERO DE CUMPLIMIENTO DE OBJETIVOS */}
       <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
         <div className="card-header">
           <div className="card-title">
             <Target size={18} style={{ color: '#2563eb' }} />
-            <span>Monitoreo de Indicadores y Metas del Plan Informático (Tabla 5 del Informe)</span>
+            <span>Monitoreo de Indicadores y Metas del Plan Informático</span>
           </div>
           <span className="badge badge-success">Evaluación en Línea</span>
         </div>

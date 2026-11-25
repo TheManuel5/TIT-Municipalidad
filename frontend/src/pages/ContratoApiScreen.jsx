@@ -56,7 +56,7 @@ export function ContratoApiScreen() {
           Regla de Oro del Proyecto TIT (Proyecto A)
         </h3>
         <p style={{ fontSize: '0.875rem', color: '#334155' }}>
-          El archivo <code>docs/contrato-api.md</code> es la referencia única y definitiva de todo el equipo de trabajo. Define los 26 endpoints, los nombres de campo de la base de datos (Tabla 7 del Informe), las reglas de seguridad de roles y los JSON de respuesta.
+          El archivo <code>docs/contrato-api.md</code> es la referencia única y definitiva de todo el equipo de trabajo. Define los 26 endpoints, los nombres de campo de la base de datos, las reglas de seguridad de roles y los JSON de respuesta.
         </p>
       </div>
 

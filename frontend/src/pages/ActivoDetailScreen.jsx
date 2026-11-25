@@ -302,7 +302,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
         </div>
       </div>
 
-      {/* CUADRÍCULA DE ATRIBUTOS ESTANDARIZADOS (TABLA 7 DEL INFORME) */}
+      {/* CUADRÍCULA DE ATRIBUTOS ESTANDARIZADOS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, marginBottom: 24 }}>
         {/* Bloque 1: Ubicación y Custodia */}
         <div className="card" style={{ marginBottom: 0 }}>

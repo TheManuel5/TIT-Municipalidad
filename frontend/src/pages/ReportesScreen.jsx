@@ -204,7 +204,7 @@ export function ReportesScreen({ onSelectActivo }) {
 </div>
 
 <!-- SECCIÓN 1: RESUMEN EJECUTIVO -->
-<div class="titulo-seccion">1. Resumen Ejecutivo del Inventario <span>Tabla 7 del Informe</span></div>
+<div class="titulo-seccion">1. Resumen Ejecutivo del Inventario</div>
 
 <div class="resumen-cards">
   <div class="resumen-card">
@@ -460,7 +460,7 @@ ${(alertas?.garantias_por_vencer || []).length > 0 ? `
           }}
         >
           <Target size={16} />
-          Metas del Plan (Tabla 5)
+          Metas del Plan
         </button>
       </div>
 
@@ -696,13 +696,13 @@ ${(alertas?.garantias_por_vencer || []).length > 0 ? `
         </div>
       )}
 
-      {/* TAB 4: METAS DEL PLAN INFORMÁTICO (TABLA 5 DEL INFORME) */}
+      {/* TAB 4: METAS DEL PLAN INFORMÁTICO */}
       {activeTab === 'okrs' && (
         <div className="card">
           <div className="card-header">
             <div className="card-title">
               <Target size={18} style={{ color: '#2563eb' }} />
-              <span>Matriz de Objetivos Específicos, OKR y KPI (Tabla 5 del Informe)</span>
+              <span>Matriz de Objetivos Específicos, OKR y KPI</span>
             </div>
             <span className="badge badge-purple">Plan 2027–2031</span>
           </div>
