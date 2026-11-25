@@ -33,6 +33,20 @@ Contiene:
 
 ---
 
+## 📚 Documentación
+
+| Documento | Para quién | Contenido |
+| :--- | :--- | :--- |
+| [`docs/manual-usuario.md`](docs/manual-usuario.md) · [PDF](docs/entregables/Manual%20de%20Usuario.pdf) | Funcionarios, jefaturas y Control | Uso de cada pantalla paso a paso, con capturas, por perfil. |
+| [`docs/manual-base-datos-y-consultas.md`](docs/manual-base-datos-y-consultas.md) | Equipo técnico | Base de datos, seed, endpoints de lectura, pruebas y solución de problemas. |
+| [`docs/seguridad.md`](docs/seguridad.md) | Equipo técnico y Control | Contraseñas, usuarios y privilegios, auditoría, respaldos y checklist de producción. |
+| [`docs/contrato-api.md`](docs/contrato-api.md) | Equipo técnico | Los 26 endpoints de la API. |
+| [Requerimientos y propuesta tecnológica (PDF)](docs/entregables/TIT%20Grupo%204%20-%20PyP%20v2.pdf) | Entrega del ramo | RF/RNF, stack real, justificación de cambios y cobertura de cada requerimiento. |
+
+Pruebas automáticas del backend: `cd backend && npm test` (148 pruebas).
+
+---
+
 ## 🚀 Puesta en Marcha
 
 ### 1. Requisitos
@@ -93,7 +107,7 @@ El backend de desarrollo crea estas cuentas para verificar permisos. En el front
 2. **Jefatura de Unidad:** `jefe_dideco` / `password123` (Rol: `jefatura`, Unidad: `DIDECO`)
 3. **Auditoría / Control:** `auditor` / `password123` (Rol: `lectura`, Unidad: `Control`)
 
-### 5. Actualizar el esquema de la base de datos
+### 6. Actualizar el esquema de la base de datos
 
 En esta actualización, el cambio de la clave foránea de `historial` solo se aplica al recrear la base. Si necesitas aplicarlo a una base existente, respáldala primero y luego, desde `backend/`, ejecuta:
 

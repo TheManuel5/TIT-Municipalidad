@@ -406,19 +406,21 @@ npm test
 Resultado esperado:
 
 ```
-# tests 136
-# pass 136
+# tests 148
+# pass 148
 # fail 0
 ```
 
 | Archivo | Pruebas | Qué verifica |
 | :--- | :--- | :--- |
 | `tests/db.test.js` | 22 | Los 106 activos y su distribución; coherencia de datos; eventos `ALTA`/`BAJA`; que repetir el seed no borre ni sobrescriba nada; inmutabilidad de la bitácora; restricciones `CHECK`. |
-| `tests/consultas.test.js` | 44 | Endpoints 2 a 6 con los tres roles: `401`, paginación, filtros, búsqueda, enmascarado, aislamiento de `jefatura` (`403`), historial y alertas. |
-| `tests/escrituras.test.js` | 16 | Endpoints 7 a 10 (Ivan) y 20 (mantenciones): permisos por rol, bitácora de cada operación, validaciones y conflictos `409` con activos dados de baja. |
+| `tests/consultas.test.js` | 45 | Endpoints 2 a 6 con los tres roles: `401`, paginación, filtros, búsqueda, enmascarado, aislamiento de `jefatura` (`403`), historial y alertas. |
+| `tests/escrituras.test.js` | 19 | Endpoints 7 a 10 (Ivan) y 20 (mantenciones): permisos por rol, bitácora de cada operación, validaciones (costos obligatorios, 0 permitido), conflictos `409` con activos dados de baja. |
+| `tests/auth.test.js` | 3 | Validación del login (DTO). |
 | `tests/seguridad.test.js` | 32 | Contraseñas bcrypt y migración, tokens falsificados, `helmet`, CORS, gestión de usuarios y revocación inmediata, auditoría inmutable, CSV enmascarado e inyección de fórmulas, límite de intentos. |
 | `tests/respaldos.test.js` | 7 | Crear, verificar, detectar alteraciones, cifrar, rotar y restaurar respaldos. |
-| `tests/reportes-importar.test.js`, `tests/conciliaciones.test.js` | 15 | Reportes, importación y conciliación física (módulos de Gaby). |
+| `tests/reportes-importar.test.js` | 13 | Reportes e importación (módulos de Gaby). |
+| `tests/conciliaciones.test.js` | 7 | Conciliación física por muestra del 10% (módulo de Gaby). |
 | `tests/helpers.js` | — | Base temporal por archivo, servidor en puerto libre y utilidades de fechas. |
 
 Características:
