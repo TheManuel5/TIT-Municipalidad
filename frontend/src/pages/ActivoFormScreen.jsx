@@ -73,11 +73,11 @@ function validarFormularioActivo(formData, { isEdit, initialData, recepcionVerif
 
   const costoInicial = Number(formData.costo_inicial);
   const costoAnual = Number(formData.costo_anual);
-  if (!errores.costo_inicial && (!Number.isFinite(costoInicial) || costoInicial <= 0 || costoInicial > 1_000_000_000_000)) {
-    errores.costo_inicial = 'Ingresa un monto mayor que 0 y hasta 1.000.000.000.000.';
+  if (!errores.costo_inicial && (!Number.isFinite(costoInicial) || costoInicial < 0 || costoInicial > 1_000_000_000_000)) {
+    errores.costo_inicial = 'Ingresa un monto entre 0 y 1.000.000.000.000 (0 si no aplica).';
   }
-  if (!errores.costo_anual && (!Number.isFinite(costoAnual) || costoAnual <= 0 || costoAnual > 1_000_000_000_000)) {
-    errores.costo_anual = 'Ingresa un monto mayor que 0 y hasta 1.000.000.000.000.';
+  if (!errores.costo_anual && (!Number.isFinite(costoAnual) || costoAnual < 0 || costoAnual > 1_000_000_000_000)) {
+    errores.costo_anual = 'Ingresa un monto entre 0 y 1.000.000.000.000 (0 si no tiene costo recurrente).';
   }
 
   ['fecha_adquisicion', 'fecha_garantia'].forEach((campo) => {
@@ -140,8 +140,8 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     if (initialData) {
       setFormData({
         ...initialData,
-        costo_inicial: Number(initialData.costo_inicial) > 0 ? initialData.costo_inicial : '',
-        costo_anual: Number(initialData.costo_anual) > 0 ? initialData.costo_anual : '',
+        costo_inicial: initialData.costo_inicial ?? '',
+        costo_anual: initialData.costo_anual ?? '',
         ultimo_mantenimiento: initialData.ultimo_mantenimiento || '',
         configuracion_red: initialData.configuracion_red && !initialData.configuracion_red.startsWith('[RESERVADO') 
           ? initialData.configuracion_red 

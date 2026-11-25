@@ -1,0 +1,9 @@
+# Archivos binarios: nunca convertir saltos de línea ni tratarlos como texto
+*.pdf  binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.db   binary
