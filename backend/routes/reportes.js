@@ -8,12 +8,14 @@
 const express = require('express');
 const router = express.Router();
 const { verificarToken } = require('../middlewares/auth');
-const { aplicarFiltroUnidad } = require('../middlewares/roles');
+const { aplicarFiltroUnidad, sanitizarActivos } = require('../middlewares/roles');
 const db = require('../../db/database');
+const { fechaHoyLocal, leerDias, obtenerAlertas } = require('../utils/alertas');
 
 router.use('/reportes', verificarToken);
 router.use('/resumen', verificarToken);
 router.use('/costos', verificarToken);
+router.use('/garantias', verificarToken);
 router.use('/exportar', verificarToken);
 
 /**
@@ -32,7 +34,9 @@ router.get(['/reportes/resumen', '/resumen'], aplicarFiltroUnidad, (req, res) =>
   // 1. Totales globales
   const totalActivos = db.prepare(`SELECT COUNT(*) AS c FROM activos ${filterSql}`).get(...params).c;
   
-  const opSql = filterSql ? `${filterSql} AND estado_operativo = 'Bueno'` : "WHERE estado_operativo = 'Bueno'";
+  const opSql = filterSql
+    ? `${filterSql} AND estado_operativo IN ('Bueno', 'Regular')`
+    : "WHERE estado_operativo IN ('Bueno', 'Regular')";
   const operativos = db.prepare(`SELECT COUNT(*) AS c FROM activos ${opSql}`).get(...params).c;
 
   const repSql = filterSql ? `${filterSql} AND estado_operativo = 'En reparación'` : "WHERE estado_operativo = 'En reparación'";
@@ -41,16 +45,23 @@ router.get(['/reportes/resumen', '/resumen'], aplicarFiltroUnidad, (req, res) =>
   const bajaSql = filterSql ? `${filterSql} AND estado_operativo = 'De baja'` : "WHERE estado_operativo = 'De baja'";
   const deBaja = db.prepare(`SELECT COUNT(*) AS c FROM activos ${bajaSql}`).get(...params).c;
 
-  // Alertas de garantía (próximos 60 días)
-  const hoy = new Date().toISOString().split('T')[0];
-  const lim = new Date();
-  lim.setDate(lim.getDate() + 60);
-  const limStr = lim.toISOString().split('T')[0];
+  const validadosSql = filterSql
+    ? `${filterSql} AND NULLIF(TRIM(custodio), '') IS NOT NULL AND NULLIF(TRIM(estado_operativo), '') IS NOT NULL AND NULLIF(TRIM(fecha_revision), '') IS NOT NULL AND NULLIF(TRIM(responsable_revision), '') IS NOT NULL`
+    : `WHERE NULLIF(TRIM(custodio), '') IS NOT NULL AND NULLIF(TRIM(estado_operativo), '') IS NOT NULL AND NULLIF(TRIM(fecha_revision), '') IS NOT NULL AND NULLIF(TRIM(responsable_revision), '') IS NOT NULL`;
+  const activosValidados = db.prepare(`SELECT COUNT(*) AS c FROM activos ${validadosSql}`).get(...params).c;
+  const porcentajeActivosValidados = totalActivos
+    ? Math.round((activosValidados / totalActivos) * 100)
+    : 0;
 
-  const alertaSql = filterSql
-    ? `${filterSql} AND fecha_garantia >= '${hoy}' AND fecha_garantia <= '${limStr}'`
-    : `WHERE fecha_garantia >= '${hoy}' AND fecha_garantia <= '${limStr}'`;
-  const alertasGarantia = db.prepare(`SELECT COUNT(*) AS c FROM activos ${alertaSql}`).get(...params).c;
+  const hoy = fechaHoyLocal();
+  const unidadParams = req.user.rol === 'jefatura' ? { unidad: req.user.unidad } : {};
+  const alertasGarantia = db.prepare(`
+    SELECT COUNT(*) AS c FROM activos
+    WHERE categoria <> 'Software'
+      AND estado_operativo <> 'De baja'
+      AND fecha_garantia BETWEEN @hoy AND date(@hoy, '+60 days')
+      ${req.user.rol === 'jefatura' ? 'AND unidad = @unidad' : ''}
+  `).get({ hoy, ...unidadParams }).c;
 
   // 2. Desglose por categoría
   const porCategoria = db.prepare(`
@@ -87,7 +98,9 @@ router.get(['/reportes/resumen', '/resumen'], aplicarFiltroUnidad, (req, res) =>
         operativos,
         en_reparacion: enReparacion,
         de_baja: deBaja,
-        alertas_garantia: alertasGarantia
+        alertas_garantia: alertasGarantia,
+        activos_validados: activosValidados,
+        porcentaje_activos_validados: porcentajeActivosValidados
       },
       por_categoria: porCategoria,
       por_estado: porEstado,
@@ -125,10 +138,23 @@ router.get(['/reportes/costos', '/costos'], aplicarFiltroUnidad, (req, res) => {
     SELECT
       categoria,
       SUM(costo_inicial) AS inversion_inicial,
-      SUM(costo_anual) AS costo_anual
+      SUM(costo_anual) AS costo_anual,
+      COUNT(*) AS cantidad
     FROM activos
     ${filterSql}
     GROUP BY categoria
+    ORDER BY inversion_inicial DESC
+  `).all(...params);
+
+  const desgloseUnidad = db.prepare(`
+    SELECT
+      unidad,
+      SUM(costo_inicial) AS inversion_inicial,
+      SUM(costo_anual) AS costo_anual,
+      COUNT(*) AS cantidad
+    FROM activos
+    ${filterSql}
+    GROUP BY unidad
     ORDER BY inversion_inicial DESC
   `).all(...params);
 
@@ -138,8 +164,35 @@ router.get(['/reportes/costos', '/costos'], aplicarFiltroUnidad, (req, res) => {
       inversion_total_inicial: inversionInicial,
       costo_anual_recurrente_total: costoAnual,
       tco_estimado_5_anos: tco5Anos,
-      desglose_por_categoria: desgloseCategoria
+      desglose_por_categoria: desgloseCategoria,
+      desglose_por_unidad: desgloseUnidad
     }
+  });
+});
+
+/**
+ * Reporte de vigencia: garantías y licencias que vencen dentro del período solicitado.
+ * Por defecto muestra los próximos 90 días para el panel de reportes.
+ */
+router.get(['/reportes/garantias', '/garantias'], aplicarFiltroUnidad, (req, res) => {
+  const dias = leerDias(req.query.dias, 90);
+  if (dias === null) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: "El parámetro 'dias' debe ser un entero entre 0 y 3650.",
+        details: [{ campo: 'dias', valor: req.query.dias }]
+      }
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    data: obtenerAlertas(db, {
+      dias,
+      unidad: req.user.rol === 'jefatura' ? req.user.unidad : null
+    })
   });
 });
 
@@ -148,7 +201,17 @@ router.get(['/reportes/costos', '/costos'], aplicarFiltroUnidad, (req, res) => {
  * Exportación del inventario institucional
  */
 router.get(['/exportar', '/reportes/exportar'], aplicarFiltroUnidad, (req, res) => {
-  const formato = (req.query.formato || 'csv').toLowerCase();
+  const formato = typeof req.query.formato === 'string' ? req.query.formato.toLowerCase() : (req.query.formato === undefined ? 'csv' : '');
+  if (!['csv', 'json'].includes(formato)) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: "El parámetro 'formato' debe ser 'csv' o 'json'.",
+        details: [{ campo: 'formato', valor: req.query.formato }]
+      }
+    });
+  }
 
   let filterSql = '';
   const params = [];
@@ -158,7 +221,13 @@ router.get(['/exportar', '/reportes/exportar'], aplicarFiltroUnidad, (req, res) 
     params.push(req.user.unidad);
   }
 
-  const activos = db.prepare(`SELECT * FROM activos ${filterSql} ORDER BY id_activo ASC`).all(...params);
+  // Seguridad (Alfredo): el middleware global de sanitización solo actúa sobre respuestas JSON;
+  // aquí se enmascaran explícitamente los campos reservados para que el CSV de jefatura y
+  // lectura no exponga criticidad ni IP/VLAN (Ley N.º 21.663).
+  const activos = sanitizarActivos(
+    db.prepare(`SELECT * FROM activos ${filterSql} ORDER BY id_activo ASC`).all(...params),
+    req.user.rol
+  );
 
   if (formato === 'json') {
     return res.status(200).json({
@@ -168,20 +237,20 @@ router.get(['/exportar', '/reportes/exportar'], aplicarFiltroUnidad, (req, res) 
   }
 
   // Generar CSV
-  if (activos.length === 0) {
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="inventario_san_pablo.csv"');
-    return res.send('');
-  }
-
-  const headers = Object.keys(activos[0]);
+  const headers = activos.length
+    ? Object.keys(activos[0])
+    : db.pragma('table_info(activos)').map((columna) => columna.name);
   const csvRows = [headers.join(',')];
 
   for (const activo of activos) {
     const values = headers.map((header) => {
       let val = activo[header];
       if (val === null || val === undefined) val = '';
-      val = String(val).replace(/"/g, '""');
+      val = String(val);
+      // Neutraliza inyección de fórmulas (CSV injection): Excel ejecutaría celdas que
+      // empiezan con = + - @ o tabulación/retorno. Se antepone un apóstrofo.
+      if (/^[=+\-@\t\r]/.test(val)) val = `'${val}`;
+      val = val.replace(/"/g, '""');
       return `"${val}"`;
     });
     csvRows.push(values.join(','));
@@ -189,7 +258,7 @@ router.get(['/exportar', '/reportes/exportar'], aplicarFiltroUnidad, (req, res) 
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inventario_san_pablo.csv"');
-  return res.status(200).send(csvRows.join('\n'));
+  return res.status(200).send(csvRows.join('\r\n'));
 });
 
 module.exports = router;

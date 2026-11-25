@@ -2,7 +2,106 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Save, AlertCircle, ShieldAlert, CheckCircle2 } from 'lucide-react';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
+import { FieldError } from '../components/FieldError';
+
+function fechaISOValida(valor) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00.000Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+}
+
+function validarFormularioActivo(formData, { isEdit, initialData, recepcionVerificada }) {
+  const errores = {};
+  const obligatorios = [
+    ['id_activo', 'Escribe un ID único.'],
+    ['categoria', 'Selecciona una categoría.'],
+    ['marca_modelo', 'Escribe la marca y el modelo.'],
+    ['ubicacion', 'Escribe la ubicación física.'],
+    ['unidad', 'Selecciona una unidad municipal.'],
+    ['custodio', 'Escribe el nombre del funcionario custodio.'],
+    ['proveedor', 'Escribe el proveedor.'],
+    ['contrato_oc', 'Escribe la orden de compra o contrato.'],
+    ['fecha_adquisicion', 'Selecciona la fecha de adquisición.'],
+    ['fecha_garantia', 'Selecciona la fecha de vencimiento de garantía.'],
+    ['costo_inicial', 'Escribe el costo inicial.'],
+    ['costo_anual', 'Escribe el costo anual recurrente.']
+  ];
+
+  obligatorios.forEach(([campo, mensaje]) => {
+    if (!String(formData[campo] ?? '').trim()) errores[campo] = mensaje;
+  });
+
+  const limites = {
+    id_activo: 64,
+    marca_modelo: 200,
+    descripcion: 2000,
+    ubicacion: 200,
+    custodio: 200,
+    proceso_asociado: 200,
+    proveedor: 200,
+    contrato_oc: 200,
+    licencias_asociadas: 1000,
+    configuracion_red: 2000
+  };
+  Object.entries(limites).forEach(([campo, maximo]) => {
+    if (String(formData[campo] ?? '').length > maximo) {
+      errores[campo] = `No puede superar ${maximo} caracteres.`;
+    }
+  });
+
+  if (!CATALOGOS.categorias.includes(formData.categoria)) {
+    errores.categoria = 'Selecciona una categoría válida de la lista.';
+  }
+  if (!CATALOGOS.unidades.includes(formData.unidad)) {
+    errores.unidad = 'Selecciona una unidad municipal válida de la lista.';
+  }
+  if (!CATALOGOS.estados_operativos.includes(formData.estado_operativo)) {
+    errores.estado_operativo = 'Selecciona un estado operativo válido.';
+  } else if (
+    formData.estado_operativo === 'De baja' &&
+    (!isEdit || initialData?.estado_operativo !== 'De baja')
+  ) {
+    errores.estado_operativo = 'Usa la acción “Dar de baja” para registrar el motivo y la bitácora.';
+  }
+  if (!CATALOGOS.criticidades.includes(formData.criticidad)) {
+    errores.criticidad = 'Selecciona una criticidad válida.';
+  }
+  if (!CATALOGOS.tipos_mantenimiento.includes(formData.tipo_mantenimiento)) {
+    errores.tipo_mantenimiento = 'Selecciona un tipo de mantención válido.';
+  }
+
+  const costoInicial = Number(formData.costo_inicial);
+  const costoAnual = Number(formData.costo_anual);
+  if (!errores.costo_inicial && (!Number.isFinite(costoInicial) || costoInicial <= 0 || costoInicial > 1_000_000_000_000)) {
+    errores.costo_inicial = 'Ingresa un monto mayor que 0 y hasta 1.000.000.000.000.';
+  }
+  if (!errores.costo_anual && (!Number.isFinite(costoAnual) || costoAnual <= 0 || costoAnual > 1_000_000_000_000)) {
+    errores.costo_anual = 'Ingresa un monto mayor que 0 y hasta 1.000.000.000.000.';
+  }
+
+  ['fecha_adquisicion', 'fecha_garantia'].forEach((campo) => {
+    if (!errores[campo] && !fechaISOValida(formData[campo])) {
+      errores[campo] = 'Selecciona una fecha válida.';
+    }
+  });
+  if (
+    !errores.fecha_adquisicion &&
+    !errores.fecha_garantia &&
+    formData.fecha_garantia < formData.fecha_adquisicion
+  ) {
+    errores.fecha_garantia = 'No puede ser anterior a la fecha de adquisición.';
+  }
+  const hoyChile = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
+  if (!isEdit && formData.fecha_adquisicion && formData.fecha_adquisicion > hoyChile) {
+    errores.fecha_adquisicion = 'La fecha de adquisición no puede estar en el futuro.';
+  }
+  if (!isEdit && !recepcionVerificada) {
+    errores.recepcion_verificada = 'Confirma que verificaste físicamente el bien y sus documentos.';
+  }
+
+  return errores;
+}
 
 export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, onCancel }) {
   const { user } = useAuth();
@@ -27,20 +126,22 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     proveedor: '',
     contrato_oc: '',
     costo_inicial: '',
-    costo_anual: 0,
+    costo_anual: '',
     configuracion_red: '',
     responsable_revision: user?.nombre || 'TI'
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [recepcionVerificada, setRecepcionVerificada] = useState(false);
 
   useEffect(() => {
     if (initialData) {
       setFormData({
         ...initialData,
-        costo_inicial: initialData.costo_inicial || '',
-        costo_anual: initialData.costo_anual || 0,
+        costo_inicial: Number(initialData.costo_inicial) > 0 ? initialData.costo_inicial : '',
+        costo_anual: Number(initialData.costo_anual) > 0 ? initialData.costo_anual : '',
         ultimo_mantenimiento: initialData.ultimo_mantenimiento || '',
         configuracion_red: initialData.configuracion_red && !initialData.configuracion_red.startsWith('[RESERVADO') 
           ? initialData.configuracion_red 
@@ -55,40 +156,79 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
       ...prev,
       [name]: value
     }));
+    setFieldErrors((previous) => ({ ...previous, [name]: '' }));
+    setError(null);
   };
+
+  const handleCostChange = (e) => {
+    const { name, value } = e.target;
+    if (value === '' || (Number.isFinite(Number(value)) && Number(value) > 0)) {
+      handleChange(e);
+      return;
+    }
+
+    setFormData((previous) => ({ ...previous, [name]: '' }));
+    setFieldErrors((previous) => ({ ...previous, [name]: 'El costo debe ser mayor que 0.' }));
+    setError('Corrige los campos marcados antes de guardar.');
+  };
+
+  const fieldError = (name) => (
+    <FieldError id={`activo-${name}-error`} message={fieldErrors[name]} />
+  );
+  const fieldA11y = (name) => ({
+    'aria-invalid': Boolean(fieldErrors[name]),
+    ...(fieldErrors[name] ? { 'aria-describedby': `activo-${name}-error` } : {})
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    const errores = validarFormularioActivo(formData, { isEdit, initialData, recepcionVerificada });
+    setFieldErrors(errores);
+    if (Object.keys(errores).length > 0) {
+      setError('Corrige los campos marcados antes de guardar.');
+      return;
+    }
 
-    // Validaciones
-    if (!formData.id_activo.trim()) {
-      setError('El ID de activo es obligatorio (ej: SP-HW-0050).');
-      return;
-    }
-    if (!formData.marca_modelo.trim()) {
-      setError('La marca y modelo comercial son obligatorios.');
-      return;
-    }
-    if (!formData.ubicacion.trim()) {
-      setError('La ubicación física es obligatoria.');
-      return;
-    }
-    if (!formData.custodio.trim()) {
-      setError('El funcionario custodio responsable es obligatorio.');
-      return;
-    }
+    const costoInicial = Number(formData.costo_inicial);
+    const costoAnual = Number(formData.costo_anual);
 
     setLoading(true);
     try {
       if (isEdit) {
-        await api.updateActivo(formData.id_activo, formData);
+        await api.updateActivo(formData.id_activo, {
+          ...Object.fromEntries(
+            Object.entries(formData).filter(([field]) => field !== 'ultimo_mantenimiento')
+          ),
+          costo_inicial: costoInicial,
+          costo_anual: costoAnual
+        });
       } else {
-        await api.createActivo(formData);
+        await api.createActivo({
+          ...formData,
+          id_activo: formData.id_activo.trim().toUpperCase(),
+          marca_modelo: formData.marca_modelo.trim(),
+          ubicacion: formData.ubicacion.trim(),
+          custodio: formData.custodio.trim(),
+          proveedor: formData.proveedor.trim(),
+          contrato_oc: formData.contrato_oc.trim(),
+          costo_inicial: costoInicial,
+          costo_anual: costoAnual,
+          recepcion_verificada: true
+        });
       }
-      onSaveSuccess(formData.id_activo);
+      onSaveSuccess(formData.id_activo.trim().toUpperCase(), isEdit ? 'updated' : 'created');
     } catch (err) {
-      setError(err.message || 'Error guardando datos del activo.');
+      const erroresServidor = Object.fromEntries(
+        (Array.isArray(err.details) ? err.details : [])
+          .filter((detalle) => detalle.campo && detalle.mensaje)
+          .map((detalle) => [detalle.campo, detalle.mensaje])
+      );
+      if (err.status === 409) erroresServidor.id_activo = err.message;
+      setFieldErrors(erroresServidor);
+      setError(Object.keys(erroresServidor).length
+        ? 'Revisa los campos marcados por el servidor.'
+        : (err.message || 'Error guardando datos del activo.'));
     } finally {
       setLoading(false);
     }
@@ -118,7 +258,31 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
+      {!isEdit && (
+        <div className="card" style={{ marginBottom: 18, borderLeft: '4px solid #2563eb' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontWeight: 700 }}>
+            <input
+              type="checkbox"
+              checked={recepcionVerificada}
+              aria-invalid={Boolean(fieldErrors.recepcion_verificada)}
+              aria-describedby={fieldErrors.recepcion_verificada ? 'activo-recepcion-error' : undefined}
+              onChange={(event) => {
+                setRecepcionVerificada(event.target.checked);
+                setFieldErrors((previous) => ({ ...previous, recepcion_verificada: '' }));
+                setError(null);
+              }}
+              style={{ marginTop: 4 }}
+            />
+            Confirmo que revisé físicamente el bien y cotejé su identificación, estado y orden de compra antes de registrar la recepción.
+          </label>
+          {fieldError('recepcion_verificada')}
+          <p className="form-helper" style={{ marginTop: 6, marginLeft: 24 }}>
+            La confirmación queda registrada en la bitácora junto al usuario responsable y la OC/contrato.
+          </p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} noValidate>
         {/* Sección 1: Identificación y Clasificación */}
         <div className="card">
           <div className="card-header">
@@ -133,12 +297,15 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="text"
                 className="form-input"
                 name="id_activo"
+                {...fieldA11y('id_activo')}
                 value={formData.id_activo}
                 onChange={handleChange}
                 placeholder="SP-HW-XXXX / SP-SW-XXXX"
                 disabled={isEdit}
+                maxLength={64}
                 required
               />
+              {fieldError('id_activo')}
               <span className="form-helper">Clave primaria inalterable una vez registrado.</span>
             </div>
 
@@ -147,6 +314,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
               <select
                 className="form-select"
                 name="categoria"
+                {...fieldA11y('categoria')}
                 value={formData.categoria}
                 onChange={handleChange}
                 required
@@ -155,31 +323,37 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
+              {fieldError('categoria')}
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Marca y Modelo Comercial *</label>
               <input
                 type="text"
                 className="form-input"
                 name="marca_modelo"
+                {...fieldA11y('marca_modelo')}
                 value={formData.marca_modelo}
                 onChange={handleChange}
                 placeholder="Ej: Lenovo ThinkPad E14 Gen 4 / HP LaserJet Pro 4003dw"
+                maxLength={200}
                 required
               />
+              {fieldError('marca_modelo')}
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Descripción Técnica Detallada</label>
               <textarea
                 className="form-textarea"
                 rows={2}
                 name="descripcion"
+                {...fieldA11y('descripcion')}
                 value={formData.descripcion}
                 onChange={handleChange}
                 placeholder="Ej: Intel Core i5 12va Gen, 16GB RAM DDR4, SSD 512GB NVMe. Incluye cargador y candado."
               />
+              {fieldError('descripcion')}
             </div>
           </div>
         </div>
@@ -197,6 +371,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
               <select
                 className="form-select"
                 name="unidad"
+                {...fieldA11y('unidad')}
                 value={formData.unidad}
                 onChange={handleChange}
                 required
@@ -205,6 +380,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                   <option key={u} value={u}>{u}</option>
                 ))}
               </select>
+              {fieldError('unidad')}
             </div>
 
             <div className="form-group">
@@ -213,24 +389,30 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="text"
                 className="form-input"
                 name="custodio"
+                {...fieldA11y('custodio')}
                 value={formData.custodio}
                 onChange={handleChange}
                 placeholder="Ej: Marcela Huenchumán Soto"
+                maxLength={200}
                 required
               />
+              {fieldError('custodio')}
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Ubicación Física *</label>
               <input
                 type="text"
                 className="form-input"
                 name="ubicacion"
+                {...fieldA11y('ubicacion')}
                 value={formData.ubicacion}
                 onChange={handleChange}
                 placeholder="Ej: DIDECO - Equipo Territorial Quilacahuín / Edificio Consistorial Oficina 204"
+                maxLength={200}
                 required
               />
+              {fieldError('ubicacion')}
             </div>
 
             <div className="form-group">
@@ -238,14 +420,21 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
               <select
                 className="form-select"
                 name="estado_operativo"
+                {...fieldA11y('estado_operativo')}
                 value={formData.estado_operativo}
                 onChange={handleChange}
                 required
               >
-                {CATALOGOS.estados_operativos.map((e) => (
+                {CATALOGOS.estados_operativos
+                  .filter((estado) =>
+                    estado !== 'De baja' ||
+                    (isEdit && initialData?.estado_operativo === 'De baja')
+                  )
+                  .map((e) => (
                   <option key={e} value={e}>{e}</option>
-                ))}
+                  ))}
               </select>
+              {fieldError('estado_operativo')}
             </div>
 
             <div className="form-group">
@@ -254,10 +443,12 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="text"
                 className="form-input"
                 name="proceso_asociado"
+                {...fieldA11y('proceso_asociado')}
                 value={formData.proceso_asociado}
                 onChange={handleChange}
                 placeholder="Ej: Proceso A (Solicitudes Ciudadanas)"
               />
+              {fieldError('proceso_asociado')}
             </div>
           </div>
         </div>
@@ -276,11 +467,14 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="text"
                 className="form-input"
                 name="proveedor"
+                {...fieldA11y('proveedor')}
                 value={formData.proveedor}
                 onChange={handleChange}
                 placeholder="Ej: Proveedor TI Sur Ltda."
+                maxLength={200}
                 required
               />
+              {fieldError('proveedor')}
             </div>
 
             <div className="form-group">
@@ -289,11 +483,14 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="text"
                 className="form-input"
                 name="contrato_oc"
+                {...fieldA11y('contrato_oc')}
                 value={formData.contrato_oc}
                 onChange={handleChange}
                 placeholder="OC 4521-12-SE25"
+                maxLength={100}
                 required
               />
+              {fieldError('contrato_oc')}
             </div>
 
             <div className="form-group">
@@ -302,10 +499,12 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="date"
                 className="form-input"
                 name="fecha_adquisicion"
+                {...fieldA11y('fecha_adquisicion')}
                 value={formData.fecha_adquisicion}
                 onChange={handleChange}
                 required
               />
+              {fieldError('fecha_adquisicion')}
             </div>
 
             <div className="form-group">
@@ -314,10 +513,12 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="date"
                 className="form-input"
                 name="fecha_garantia"
+                {...fieldA11y('fecha_garantia')}
                 value={formData.fecha_garantia}
                 onChange={handleChange}
                 required
               />
+              {fieldError('fecha_garantia')}
             </div>
 
             <div className="form-group">
@@ -326,37 +527,46 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 type="number"
                 className="form-input"
                 name="costo_inicial"
+                {...fieldA11y('costo_inicial')}
                 value={formData.costo_inicial}
-                onChange={handleChange}
+                onChange={handleCostChange}
                 placeholder="650000"
-                min="0"
+                min="1"
+                step="1"
                 required
               />
+              {fieldError('costo_inicial')}
             </div>
 
             <div className="form-group">
-              <label className="form-label">Costo Anual Recurrente ($ CLP/año)</label>
+              <label className="form-label">Costo Anual Recurrente ($ CLP/año) *</label>
               <input
                 type="number"
                 className="form-input"
                 name="costo_anual"
+                {...fieldA11y('costo_anual')}
                 value={formData.costo_anual}
-                onChange={handleChange}
-                placeholder="0"
-                min="0"
+                onChange={handleCostChange}
+                placeholder="10000"
+                min="1"
+                step="1"
+                required
               />
+              {fieldError('costo_anual')}
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-grid-full">
               <label className="form-label">Licencias Asociadas y Software Preinstalado</label>
               <input
                 type="text"
                 className="form-input"
                 name="licencias_asociadas"
+                {...fieldA11y('licencias_asociadas')}
                 value={formData.licencias_asociadas}
                 onChange={handleChange}
                 placeholder="Ej: Windows 11 Pro OEM, Office 2021 Hogar y Empresas"
               />
+              {fieldError('licencias_asociadas')}
             </div>
           </div>
         </div>
@@ -367,7 +577,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
             <div className="card-header">
               <div className="card-title">
                 <ShieldAlert size={18} style={{ color: 'var(--primary)' }} />
-                <span>4. Parámetros Técnicos Reservados (Ley N.º 21.663)</span>
+                <span>Datos de seguridad y red</span>
               </div>
               <span className="badge badge-purple">Solo Administrador TI</span>
             </div>
@@ -378,6 +588,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 <select
                   className="form-select"
                   name="criticidad"
+                  {...fieldA11y('criticidad')}
                   value={formData.criticidad}
                   onChange={handleChange}
                 >
@@ -385,6 +596,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                     <option key={cr} value={cr}>{cr}</option>
                   ))}
                 </select>
+                {fieldError('criticidad')}
                 <span className="form-helper">Nivel de impacto en caso de falla o indisponibilidad.</span>
               </div>
 
@@ -393,6 +605,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 <select
                   className="form-select"
                   name="tipo_mantenimiento"
+                  {...fieldA11y('tipo_mantenimiento')}
                   value={formData.tipo_mantenimiento}
                   onChange={handleChange}
                 >
@@ -400,18 +613,21 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                     <option key={tm} value={tm}>{tm}</option>
                   ))}
                 </select>
+                {fieldError('tipo_mantenimiento')}
               </div>
 
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <div className="form-group form-grid-full">
                 <label className="form-label">Configuración de Red / IP / VLAN / Firmware / BitLocker</label>
                 <input
                   type="text"
                   className="form-input"
                   name="configuracion_red"
+                  {...fieldA11y('configuracion_red')}
                   value={formData.configuracion_red}
                   onChange={handleChange}
                   placeholder="Ej: IP 192.168.20.45 / VLAN 20 / Windows 11 22H2 / BitLocker Cifrado: ACTIVO"
                 />
+                {fieldError('configuracion_red')}
                 <span className="form-helper">
                   Información estrictamente clasificada. No se divulga en perfiles de jefatura ni auditoría.
                 </span>
@@ -434,7 +650,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={loading}
+            disabled={loading || (!isEdit && !recepcionVerificada)}
             style={{ padding: '10px 24px' }}
           >
             <Save size={16} />

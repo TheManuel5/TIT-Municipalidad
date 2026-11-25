@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { CategoryBadge, StatusBadge, getCategoryIcon } from '../components/Badge';
 import { ModalTraslado } from '../components/ModalTraslado';
 import { ModalBaja } from '../components/ModalBaja';
+import { ModalMantenimiento } from '../components/ModalMantenimiento';
 import { 
   ArrowLeft, 
   Edit3, 
@@ -25,7 +26,8 @@ import {
   Copy,
   Check,
   Tag,
-  ShieldAlert
+  ShieldAlert,
+  Wrench
 } from 'lucide-react';
 
 export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
@@ -42,6 +44,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
   // Modales
   const [trasladoModalOpen, setTrasladoModalOpen] = useState(false);
   const [bajaModalOpen, setBajaModalOpen] = useState(false);
+  const [mantModalOpen, setMantModalOpen] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToastMessage({ msg, type });
@@ -82,6 +85,12 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
   const handleConfirmTraslado = async (datos) => {
     await api.trasladarActivo(activo.id_activo, datos);
     showToast(`Traslado registrado exitosamente para ${activo.id_activo}.`);
+    cargarFicha();
+  };
+
+  const handleConfirmMantenimiento = async (datos) => {
+    await api.registrarMantenimiento(activo.id_activo, datos);
+    showToast(`Mantención ${datos.tipo_mantenimiento.toLowerCase()} registrada para ${activo.id_activo}.`);
     cargarFicha();
   };
 
@@ -137,7 +146,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
       {/* Toast Feedback */}
       {toastMessage && (
         <div 
-          className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : 'alert-success'}`}
+          className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : 'alert-success'} toast-slide-in`}
           style={{ position: 'fixed', top: 20, right: 24, zIndex: 9999, boxShadow: 'var(--shadow-lg)' }}
         >
           <CheckCircle2 size={18} />
@@ -154,8 +163,8 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
 
         {isAdmin && (
           <div style={{ display: 'flex', gap: 10 }}>
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="btn btn-secondary btn-sm"
               onClick={() => onEdit(activo)}
             >
@@ -163,14 +172,27 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               Editar Especificaciones
             </button>
 
-            <button 
-              type="button" 
-              className="btn btn-secondary btn-sm"
-              onClick={() => setTrasladoModalOpen(true)}
-            >
-              <ArrowRightLeft size={15} />
-              Registrar Traslado
-            </button>
+            {activo.estado_operativo !== 'De baja' && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setTrasladoModalOpen(true)}
+              >
+                <ArrowRightLeft size={15} />
+                Registrar Traslado
+              </button>
+            )}
+
+            {activo.estado_operativo !== 'De baja' && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setMantModalOpen(true)}
+              >
+                <Wrench size={15} />
+                Registrar Mantención
+              </button>
+            )}
 
             {activo.estado_operativo !== 'De baja' && (
               <button 
@@ -280,7 +302,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
         </div>
       </div>
 
-      {/* CUADRÍCULA DE ATRIBUTOS ESTANDARIZADOS (TABLA 7 DEL INFORME) */}
+      {/* CUADRÍCULA DE ATRIBUTOS ESTANDARIZADOS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, marginBottom: 24 }}>
         {/* Bloque 1: Ubicación y Custodia */}
         <div className="card" style={{ marginBottom: 0 }}>
@@ -373,7 +395,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
           </div>
         </div>
 
-        {/* Bloque 4: Datos Técnicos y Ciberseguridad (RESERVADOS Ley 21.663) */}
+        {/* Datos de seguridad y red */}
         <div className="card" style={{ 
           marginBottom: 0, 
           borderColor: isReservadoCriticidad ? '#e2e8f0' : '#bfdbfe',
@@ -382,7 +404,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
           <div className="card-header">
             <div className="card-title">
               <ShieldCheck size={18} style={{ color: isReservadoCriticidad ? 'var(--text-muted)' : 'var(--primary)' }} />
-              <span>Seguridad y Red (Ley 21.663)</span>
+              <span>Datos de seguridad y red</span>
             </div>
             <span className="badge badge-purple">
               {isReservadoCriticidad ? 'Restringido' : 'Admin TI'}
@@ -395,7 +417,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               </span>
               {isReservadoCriticidad ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem' }}>
-                  <Lock size={12} /> Campo Reservado (Solo Admin TI)
+                  <Lock size={12} /> Información reservada (solo Administrador TI)
                 </div>
               ) : (
                 <span className={`badge ${activo.criticidad === 'Alta' ? 'badge-danger' : 'badge-warning'}`}>
@@ -410,7 +432,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               </span>
               {isReservadoRed ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem' }}>
-                  <Lock size={12} /> Estrictamente Reservado (Ley N.º 21.663)
+                  <Lock size={12} /> Información reservada (solo Administrador TI)
                 </div>
               ) : (
                 <div style={{ 
@@ -451,6 +473,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               if (ev.tipo_evento === 'TRASLADO') badgeType = 'badge-purple';
               if (ev.tipo_evento === 'EDICION') badgeType = 'badge-warning';
               if (ev.tipo_evento === 'BAJA') badgeType = 'badge-danger';
+              if (ev.tipo_evento === 'MANTENIMIENTO') badgeType = 'badge-info';
 
               const fechaFormatted = new Date(ev.fecha).toLocaleString('es-CL', {
                 dateStyle: 'medium',
@@ -516,6 +539,13 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
         onClose={() => setTrasladoModalOpen(false)}
         activo={activo}
         onConfirm={handleConfirmTraslado}
+      />
+
+      <ModalMantenimiento
+        isOpen={mantModalOpen}
+        onClose={() => setMantModalOpen(false)}
+        activo={activo}
+        onConfirm={handleConfirmMantenimiento}
       />
 
       <ModalBaja

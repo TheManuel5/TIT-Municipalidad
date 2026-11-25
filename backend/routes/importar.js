@@ -1,28 +1,36 @@
 /**
- * importar.js - Carga Masiva de Activos (CSV o JSON)
+ * importar.js - Carga masiva de activos desde filas CSV convertidas a JSON.
  * Responsable según reparto: Gaby
- * Municipalidad de San Pablo - Plan Informático Municipal 2027-2031 (Proyecto A)
- * Cumple con docs/contrato-api.md (Sección 4.4: Endpoint 13)
  */
 
 const express = require('express');
 const router = express.Router();
 const { verificarToken } = require('../middlewares/auth');
 const { requerirRol } = require('../middlewares/roles');
+const { fechaHoyLocal } = require('../utils/alertas');
 const db = require('../../db/database');
 
 const CATEGORIAS_VALIDAS = ['PC', 'Portátil', 'Servidor', 'Red', 'Impresora', 'Software', 'Nube'];
 const ESTADOS_VALIDOS = ['Bueno', 'Regular', 'Malo', 'En reparación', 'De baja'];
-
+const CRITICIDADES_VALIDAS = ['Alta', 'Media', 'Baja'];
+const TIPOS_MANTENIMIENTO_VALIDOS = ['Preventiva', 'Correctiva', 'Sin mantención'];
 const soloAdmin = [verificarToken, requerirRol('admin_ti')];
 
-/**
- * Endpoint 13: POST /api/importar (y /api/importar masivo)
- * Carga masiva de activos con discriminación de filas válidas y erróneas
- */
-router.post(['/importar', '/'], soloAdmin, (req, res) => {
-  const filas = req.body.filas || [];
+function fechaValida(valor) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00.000Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+}
 
+function numeroPositivo(valor) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  const numero = Number(valor);
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
+}
+
+// Solo /importar: el alias '/' hacía que un POST /api a secas ejecutara una importación.
+router.post('/importar', soloAdmin, (req, res) => {
+  const filas = req.body && req.body.filas;
   if (!Array.isArray(filas) || filas.length === 0) {
     return res.status(400).json({
       success: false,
@@ -34,55 +42,95 @@ router.post(['/importar', '/'], soloAdmin, (req, res) => {
     });
   }
 
+  if (req.body.recepcion_verificada !== true) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Confirme la verificación física y documental del lote antes de registrar su recepción.',
+        details: []
+      }
+    });
+  }
+
+  const hoy = fechaHoyLocal();
   const filasInvalidas = [];
   const filasValidas = [];
+  const idsVistos = new Set();
+  const existeActivo = db.prepare('SELECT 1 FROM activos WHERE id_activo = ?');
 
-  const checkStmt = db.prepare('SELECT id_activo FROM activos WHERE id_activo = ?');
-
-  // Evaluar cada fila
   filas.forEach((fila, index) => {
-    const numFila = index + 1;
-    const id = fila.id_activo ? String(fila.id_activo).trim() : '';
+    const numeroFila = index + 1;
+    if (!fila || typeof fila !== 'object' || Array.isArray(fila)) {
+      filasInvalidas.push({ fila: numeroFila, id_activo: null, error: 'La fila debe ser un objeto de activo.' });
+      return;
+    }
+
+    const id = String(fila.id_activo || '').trim().toUpperCase();
+    const errores = [];
 
     if (!id) {
-      filasInvalidas.push({ fila: numFila, id_activo: null, error: 'Falta identificador id_activo.' });
-      return;
+      errores.push('Falta identificador id_activo.');
+    } else {
+      if (idsVistos.has(id)) errores.push(`ID '${id}' está duplicado en el archivo.`);
+      else idsVistos.add(id);
+      if (existeActivo.get(id)) errores.push(`ID '${id}' ya existe en la base de datos (clave duplicada).`);
     }
 
-    if (checkStmt.get(id)) {
-      filasInvalidas.push({ fila: numFila, id_activo: id, error: `ID '${id}' ya existe en la base de datos (clave duplicada).` });
-      return;
+    if (!CATEGORIAS_VALIDAS.includes(fila.categoria)) {
+      errores.push(`Categoría '${fila.categoria || ''}' no permitida en lista cerrada.`);
     }
 
-    if (!fila.categoria || !CATEGORIAS_VALIDAS.includes(fila.categoria)) {
-      filasInvalidas.push({
-        fila: numFila,
-        id_activo: id,
-        error: `Categoría '${fila.categoria || ''}' no permitida en lista cerrada.`
-      });
-      return;
+    for (const campo of ['marca_modelo', 'ubicacion', 'unidad', 'custodio', 'contrato_oc']) {
+      if (!String(fila[campo] || '').trim()) errores.push(`Falta el campo obligatorio ${campo}.`);
     }
 
-    if (!fila.marca_modelo || !fila.ubicacion || !fila.unidad || !fila.custodio) {
-      filasInvalidas.push({
-        fila: numFila,
-        id_activo: id,
-        error: 'Faltan campos obligatorios (marca_modelo, ubicacion, unidad o custodio).'
-      });
+    const estado = fila.estado_operativo || 'Bueno';
+    const criticidad = fila.criticidad || 'Media';
+    const tipoMantenimiento = fila.tipo_mantenimiento || 'Preventiva';
+    if (!ESTADOS_VALIDOS.includes(estado)) errores.push(`Estado operativo '${estado}' no permitido.`);
+    if (!CRITICIDADES_VALIDAS.includes(criticidad)) errores.push(`Criticidad '${criticidad}' no permitida.`);
+    if (!TIPOS_MANTENIMIENTO_VALIDOS.includes(tipoMantenimiento)) {
+      errores.push(`Tipo de mantenimiento '${tipoMantenimiento}' no permitido.`);
+    }
+
+    const costoInicial = numeroPositivo(fila.costo_inicial);
+    const costoAnual = numeroPositivo(fila.costo_anual);
+    if (costoInicial === null) errores.push('costo_inicial debe ser un número mayor que 0.');
+    if (costoAnual === null) errores.push('costo_anual debe ser un número mayor que 0.');
+
+    for (const campo of ['fecha_adquisicion', 'fecha_garantia', 'ultimo_mantenimiento']) {
+      if (fila[campo] && !fechaValida(String(fila[campo]).trim())) {
+        errores.push(`${campo} debe tener formato de fecha YYYY-MM-DD.`);
+      }
+    }
+    if (estado === 'De baja' && !String(fila.motivo_baja || '').trim()) {
+      errores.push("El campo motivo_baja es obligatorio para activos 'De baja'.");
+    }
+
+    if (errores.length) {
+      filasInvalidas.push({ fila: numeroFila, id_activo: id || null, error: errores.join(' ') });
       return;
     }
 
     filasValidas.push({
       ...fila,
       id_activo: id,
-      estado_operativo: ESTADOS_VALIDOS.includes(fila.estado_operativo) ? fila.estado_operativo : 'Bueno',
-      criticidad: ['Alta', 'Media', 'Baja'].includes(fila.criticidad) ? fila.criticidad : 'Media',
-      costo_inicial: Number(fila.costo_inicial) || 0,
-      costo_anual: Number(fila.costo_anual) || 0
+      marca_modelo: String(fila.marca_modelo).trim(),
+      ubicacion: String(fila.ubicacion).trim(),
+      unidad: String(fila.unidad).trim(),
+      custodio: String(fila.custodio).trim(),
+      contrato_oc: String(fila.contrato_oc).trim(),
+      estado_operativo: estado,
+      criticidad,
+      tipo_mantenimiento: tipoMantenimiento,
+      costo_inicial: costoInicial,
+      costo_anual: costoAnual,
+      fecha_adquisicion: fila.fecha_adquisicion || hoy,
+      fecha_garantia: fila.fecha_garantia || hoy
     });
   });
 
-  // Insertar filas válidas en transacción
   if (filasValidas.length > 0) {
     const insertActivo = db.prepare(`
       INSERT INTO activos (
@@ -97,19 +145,16 @@ router.post(['/importar', '/'], soloAdmin, (req, res) => {
         @costo_inicial, @costo_anual, @configuracion_red, @fecha_revision, @responsable_revision, @motivo_baja
       )
     `);
-
     const insertHistorial = db.prepare(`
       INSERT INTO historial (
-        id_activo, fecha, tipo_evento, usuario, unidad_origen, unidad_destino, custodio_anterior, custodio_nuevo, motivo, detalles
-      ) VALUES (
-        ?, ?, 'ALTA', ?, null, ?, null, ?, 'Carga masiva por importación CSV', 'Importación institucional por lote'
-      )
+        id_activo, fecha, tipo_evento, usuario, unidad_origen, unidad_destino,
+        custodio_anterior, custodio_nuevo, motivo, detalles
+      ) VALUES (?, ?, 'IMPORTACION', ?, null, ?, null, ?, 'Importación masiva CSV', ?)
     `);
+    const fechaEvento = new Date().toISOString();
+    const usuario = req.user.nombre || req.user.username;
 
-    const hoyISO = new Date().toISOString();
-    const hoyStr = hoyISO.split('T')[0];
-
-    const runImport = db.transaction(() => {
+    db.transaction(() => {
       for (const item of filasValidas) {
         insertActivo.run({
           id_activo: item.id_activo,
@@ -121,33 +166,31 @@ router.post(['/importar', '/'], soloAdmin, (req, res) => {
           custodio: item.custodio,
           estado_operativo: item.estado_operativo,
           ultimo_mantenimiento: item.ultimo_mantenimiento || null,
-          tipo_mantenimiento: item.tipo_mantenimiento || 'Preventiva',
+          tipo_mantenimiento: item.tipo_mantenimiento,
           criticidad: item.criticidad,
           proceso_asociado: item.proceso_asociado || null,
-          fecha_adquisicion: item.fecha_adquisicion || hoyStr,
-          fecha_garantia: item.fecha_garantia || hoyStr,
+          fecha_adquisicion: item.fecha_adquisicion,
+          fecha_garantia: item.fecha_garantia,
           licencias_asociadas: item.licencias_asociadas || null,
           proveedor: item.proveedor || 'Sin proveedor asignado',
-          contrato_oc: item.contrato_oc || 'Sin OC',
+          contrato_oc: item.contrato_oc,
           costo_inicial: item.costo_inicial,
           costo_anual: item.costo_anual,
           configuracion_red: item.configuracion_red || null,
-          fecha_revision: hoyStr,
-          responsable_revision: req.user.nombre,
-          motivo_baja: null
+          fecha_revision: hoy,
+          responsable_revision: usuario,
+          motivo_baja: item.motivo_baja || null
         });
-
         insertHistorial.run(
           item.id_activo,
-          hoyISO,
-          req.user.nombre || req.user.username,
+          fechaEvento,
+          usuario,
           item.unidad,
-          item.custodio
+          item.custodio,
+          `Control de recepción física y documental confirmado antes del alta; documento: ${item.contrato_oc || 'Sin OC'}.`
         );
       }
-    });
-
-    runImport();
+    })();
   }
 
   return res.status(200).json({

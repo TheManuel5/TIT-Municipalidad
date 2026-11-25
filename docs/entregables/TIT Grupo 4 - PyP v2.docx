@@ -1,0 +1,151 @@
+           Levantamiento de Requerimientos y Propuesta Tecnológica
+Proyecto: Sistema de Gestión de Activos y Plan Informático Municipal
+Cliente: Ilustre Municipalidad de San Pablo
+Grupo 4: William Ivan Guerra Chin, Alfredo Flores Ibarra, Manuel Arteaga Nevado, Gaby Lizeth Zanabria Yrigoin
+Versión: 2.0 (noviembre de 2026). Ajusta la propuesta tecnológica a la implementación del prototipo (Proyecto A) e incorpora los controles de seguridad.
+--------------------------------------------------------------------------------
+
+1. Requerimientos Funcionales (RF)
+1.- ¿Qué datos específicos necesitan registrar de cada activo físico y digital?
+2.- ¿Qué eventos del ciclo de vida requieren trazabilidad (alta, asignación, traslado, mantención o baja)?
+3.- Dado que las solicitudes llegan por canales presenciales, telefónicos y digitales, ¿cómo esperan que el software genere un folio único, gestione las derivaciones entre departamentos (DIDECO, DOM, etc.) y notifique el estado del avance tanto al funcionario como al ciudadano?
+4.- Al momento de registrar una falla o requerimiento informático, ¿qué categorías de incidentes requieren y cómo debe ser el flujo de escalamiento, asignación automática de técnicos y confirmación del cierre de tickets?
+5.- Considerando las exigencias de la Ley N.º 21.180 de Transformación Digital, ¿qué flujos de aprobación, firmas electrónicas, control de versiones y permisos de acceso debe incorporar el sistema para eliminar el uso de carpetas compartidas y papel?
+6.- ¿Cómo debe estructurarse la jerarquía de usuarios dentro del software y qué mecanismo se utilizará para solicitar, aprobar y revocar privilegios de acceso?
+7.- Para evitar islas de información y dobles digitaciones, ¿con qué sistemas o bases de datos actuales se debe conectar la plataforma y qué datos específicos deben intercambiarse?
+8.- ¿Qué indicadores clave (KPIs) e informes consolidados requiere visualizar la Alcaldía, SECPLAN o Administración Municipal para monitorear el estado de los activos, tiempos de respuesta y proyectos en tiempo real?
+--------------------------------------------------------------------------------
+
+2. Requerimientos No Funcionales (RNF)
+1.- Debido a la inestabilidad de conectividad en sectores rurales como Quilacahuín o Trumao, ¿el software debe contar con un modo de operación offline sincronizable y cómo se deben gestionar las contingencias de pérdida de señal?
+2.- Para los servicios de atención pública y gestión crítica, ¿cuál es el tiempo máximo aceptable de caída del servicio y cuánta pérdida de datos procesados se pueden permitir en caso de una falla grave?
+3.- Ante la manipulación de datos sensibles de la comunidad y el riesgo de pérdida de equipos portátiles en terreno, ¿qué nivel de cifrado de bases de datos, anonimización y requisitos de seguridad física/lógica se deben exigir?
+4.- ¿Qué estándares de usabilidad, simplicidad de interfaz y compatibilidad con dispositivos móviles se requieren?
+5.- ¿Con qué periodicidad se deben realizar las copias de seguridad automáticas y qué garantías de restauración periódica e integridad deben estar auditables?
+6.- ¿Qué acciones dentro del sistema deben quedar guardadas en un registro de auditoría o logs inalterables para cumplir con la Ley de Transparencia y Ciberseguridad?
+7.- Estimando el volumen de usuarios concurrentes y el crecimiento documental a 5 años o más, ¿qué volumen proyectado de datos e infraestructura se prevé soportar?
+8.- ¿Existen normativas sectoriales adicionales o protocolos del municipio que restrinjan si la infraestructura de alojamiento debe ser en la nube, servidores locales o un esquema híbrido?
+--------------------------------------------------------------------------------
+
+3. Propuesta de Arquitectura Tecnológica
+La siguiente tabla refleja las tecnologías efectivamente utilizadas en el prototipo del sistema de inventario tecnológico (Proyecto A).
+Capa
+Tecnología Seleccionada
+Justificación / Propósito
+Front-End
+React 18 + Vite 6 + CSS propio (iconos lucide-react)
+Interfaz web rápida, moderna y adaptable para funcionarios y administradores. Opera con datos simulados (demostración) o con la API real.
+Back-End
+Node.js + Express 5 + JSON Web Token (jsonwebtoken)
+API REST de 26 endpoints con autenticación Bearer y control de acceso por rol (admin_ti, jefatura, lectura).
+Seguridad
+bcryptjs + helmet + express-rate-limit + cors
+Hash de contraseñas, cabeceras HTTP seguras, límite de intentos de inicio de sesión y orígenes autorizados.
+Base de Datos
+SQLite (better-sqlite3)
+Base relacional embebida, sin servidor adicional que administrar. Restricciones de integridad y triggers que hacen inmutables la bitácora y la auditoría. Migrable a PostgreSQL si el volumen lo exige.
+Auditoría y Respaldos
+Registro de auditoría en SQLite + módulo crypto de Node.js (SHA-256, AES-256-GCM)
+Registro inalterable de accesos y operaciones. Respaldos automáticos verificados, con huella de integridad y cifrado opcional.
+Pruebas
+node:test (incluido en Node.js)
+136 pruebas automatizadas de la API, la base de datos, la seguridad y los respaldos.
+Acceso en terreno
+Interfaz web adaptable (sin aplicación nativa en esta etapa)
+Consulta y registro desde notebook o tablet con conexión. La aplicación nativa y el modo offline quedan como trabajo futuro.
+Infraestructura
+VPS Privada (Servidor Municipal)
+Alojamiento dedicado que otorga control total de la información y cumplimiento normativo.
+3.1 Ajustes respecto de la propuesta inicial
+Durante el desarrollo, el equipo acordó continuar con las tecnologías ya implementadas y actualizar este documento en consecuencia. Los cambios mantienen la arquitectura web cliente-servidor con API REST y el alojamiento en servidor municipal.
+Propuesta inicial
+Implementado
+Motivo del ajuste
+NestJS
+Express 5
+Mismo ecosistema Node.js y misma API REST, con menor curva de aprendizaje y estructura más simple para el tamaño del prototipo. bcryptjs se mantiene tal como se propuso.
+PostgreSQL
+SQLite
+No requiere instalar ni administrar un servidor de base de datos y se respalda como un único archivo. Es adecuado para el volumen actual (106 activos y pocos usuarios simultáneos). El modelo usa SQL estándar, lo que permite migrar a PostgreSQL si crece el volumen o la concurrencia.
+Kotlin (app Android)
+Interfaz web adaptable
+El prototipo prioriza el inventario único (Proyecto A) en una sola interfaz web. La app nativa con captura offline (RNF-1) se mantiene como trabajo futuro.
+Tailwind CSS
+CSS propio
+Hojas de estilo propias con variables de diseño, sin dependencia adicional.
+3.2 Tecnologías complementarias de seguridad
+Se incorporaron las siguientes tecnologías, que complementan el stack anterior sin reemplazar ninguna de sus capas, para responder a los requerimientos de seguridad, respaldo y auditoría:
+Tecnología
+Función
+Requerimiento
+bcryptjs
+Las contraseñas se guardan solo como hash bcrypt (costo 10); se migran automáticamente las bases antiguas. Política mínima: 8 caracteres, con letras y números.
+RNF-3
+helmet
+Cabeceras HTTP de seguridad (anti-clickjacking, nosniff, HSTS) y ocultamiento de la versión del servidor.
+RNF-3
+express-rate-limit
+Bloquea la IP tras 10 intentos fallidos de inicio de sesión en 15 minutos (protección contra fuerza bruta).
+RNF-3
+cors (restringido)
+Solo el frontend autorizado puede consumir la API desde el navegador.
+RNF-3
+Triggers SQLite
+La bitácora de activos y el registro de auditoría solo admiten inserciones: no se pueden modificar ni borrar.
+RNF-6
+crypto de Node.js
+Huella SHA-256 de cada respaldo y cifrado AES-256-GCM opcional para respaldos que salen del servidor.
+RNF-3, RNF-5
+4. Cobertura de los Requerimientos en el Prototipo
+Estado de cada requerimiento en la versión actual del prototipo. Los marcados como fuera de alcance corresponden a otros proyectos del Plan Informático Municipal.
+Req.
+Estado
+Cómo lo cubre el prototipo
+RF-1
+Implementado
+Modelo de 23 campos (Tabla 7 del Plan Informático) con catálogos cerrados de categoría, estado, criticidad y unidad. Carga inicial de 106 activos.
+RF-2
+Implementado
+Alta, edición, traslado y reasignación de custodio, mantención (preventiva y correctiva) y baja con motivo obligatorio. Cada evento queda en una bitácora inmutable.
+RF-3
+Fuera del alcance del Proyecto A
+Folios, derivaciones entre departamentos y notificación ciudadana corresponden a otro proyecto del Plan Informático.
+RF-4
+Fuera del alcance del Proyecto A
+La mesa de ayuda (tickets, escalamiento y asignación de técnicos) corresponde a otro proyecto del Plan Informático.
+RF-5
+Parcial
+Permisos por rol, trazabilidad completa y exportación en formatos abiertos (CSV/JSON). No incluye firma electrónica ni flujos de aprobación documental.
+RF-6
+Implementado
+Tres roles (Administrador TI, Jefatura de unidad, Lectura/Control). La jefatura solicita, el Administrador TI aprueba (crea la cuenta) y revoca; la revocación corta de inmediato las sesiones abiertas. Todo queda auditado.
+RF-7
+Parcial
+Importación masiva y exportación en CSV/JSON para evitar doble digitación. No hay integración directa con otros sistemas municipales.
+RF-8
+Implementado
+Panel con indicadores (total, operativos, bajas, alertas, inversión), reportes por categoría, estado y unidad, costo total a 5 años, vencimiento de garantías e indicadores del Plan (Tabla 5).
+RNF-1
+Trabajo futuro
+Sin modo offline en esta etapa; requiere la aplicación nativa propuesta originalmente.
+RNF-2
+Parcial
+Respaldos automáticos cada 24 horas: pérdida máxima de datos de un día, y restauración en minutos con un comando. No hay alta disponibilidad (un solo servidor).
+RNF-3
+Parcial
+Contraseñas con hash, campos reservados (criticidad, IP/VLAN) enmascarados según rol incluso en exportaciones, y respaldos cifrables. La base en uso no se cifra; se recomienda cifrar el disco del servidor.
+RNF-4
+Parcial
+Interfaz adaptable con menú lateral colapsable y vistas de tarjetas o tabla. Falta una validación formal en teléfonos móviles.
+RNF-5
+Implementado
+Respaldo automático diario, verificación de integridad y huella SHA-256, retención de 14 copias y restauración que guarda antes el estado actual. Todo queda auditado.
+RNF-6
+Implementado
+Registro inmutable de inicios de sesión (exitosos, fallidos y bloqueados), escrituras, exportaciones, gestión de usuarios y respaldos, consultable por Administración TI y Control.
+RNF-7
+Parcial
+SQLite es adecuado para el volumen actual; ante mayor concurrencia o crecimiento documental se contempla migrar a PostgreSQL.
+RNF-8
+Definido
+Despliegue en servidor VPS municipal (infraestructura local), con los datos bajo control de la municipalidad.

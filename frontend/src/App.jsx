@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from './context/AuthContext';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { LoginScreen } from './pages/LoginScreen';
@@ -8,21 +9,87 @@ import { ActivosListScreen } from './pages/ActivosListScreen';
 import { ActivoDetailScreen } from './pages/ActivoDetailScreen';
 import { ActivoFormScreen } from './pages/ActivoFormScreen';
 import { ReportesScreen } from './pages/ReportesScreen';
+import { ConciliacionScreen } from './pages/ConciliacionScreen';
 import { ImportarScreen } from './pages/ImportarScreen';
 import { ContratoApiScreen } from './pages/ContratoApiScreen';
+import { SeguridadScreen } from './pages/SeguridadScreen';
 
 export function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
+  const [toastMessage, setToastMessage] = useState(null);
+  const wasAuthenticated = useRef(isAuthenticated);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setToastMessage({ msg, type });
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    const nombre = user?.nombre || user?.username || '';
+    logout();
+    showToast(`Sesión cerrada correctamente. Hasta pronto, ${nombre}.`, 'info');
+  }, [user, logout, showToast]);
+
+  useEffect(() => {
+    if (!wasAuthenticated.current && isAuthenticated) {
+      setCurrentTab('dashboard');
+      setSelectedActivoId(null);
+      setEditingActivo(null);
+      setSidebarOpen(!window.matchMedia('(max-width: 1024px)').matches);
+      showToast(`Sesión iniciada correctamente. Bienvenido/a, ${user?.nombre || user?.username || ''}.`);
+    }
+    wasAuthenticated.current = isAuthenticated;
+  }, [isAuthenticated, user, showToast]);
+
+  useEffect(() => {
+    if (!toastMessage) return undefined;
+    const timeout = window.setTimeout(() => setToastMessage(null), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [toastMessage]);
 
   // Gestión de navegación por pestañas y vistas
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [selectedActivoId, setSelectedActivoId] = useState(null);
   const [editingActivo, setEditingActivo] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia('(max-width: 1024px)').matches
+  );
 
-  // Si no está autenticado, mostrar pantalla de Login
+  useEffect(() => {
+    const breakpoint = window.matchMedia('(max-width: 1024px)');
+    const syncSidebarWithViewport = (event) => setSidebarOpen(!event.matches);
+    breakpoint.addEventListener('change', syncSidebarWithViewport);
+    return () => breakpoint.removeEventListener('change', syncSidebarWithViewport);
+  }, []);
+
+  const handleSidebarClose = () => {
+    if (window.matchMedia('(max-width: 1024px)').matches) setSidebarOpen(false);
+  };
+
+  const puedeAccederATab = (tab) => {
+    if (tab === 'importar') return user?.rol === 'admin_ti';
+    if (tab === 'conciliacion') return user?.rol === 'admin_ti' || user?.rol === 'lectura';
+    return true;
+  };
+  const tabActiva = puedeAccederATab(currentTab) ? currentTab : 'dashboard';
+
+  // Si no está autenticado, mostrar pantalla de Login (mantener toast visible durante logout)
   if (!isAuthenticated) {
-    return <LoginScreen />;
+    return (
+      <>
+        {toastMessage && (
+          <div
+            className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : toastMessage.type === 'info' ? 'alert-info' : 'alert-success'} toast-slide-in`}
+            role="status"
+            aria-live="polite"
+            style={{ position: 'fixed', top: 20, right: 24, zIndex: 100, boxShadow: 'var(--shadow-lg)' }}
+          >
+            {toastMessage.type === 'danger' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            <span>{toastMessage.msg}</span>
+          </div>
+        )}
+        <LoginScreen />
+      </>
+    );
   }
 
   // Handlers de navegación
@@ -41,38 +108,68 @@ export function App() {
     setCurrentTab('activo_create');
   };
 
-  const handleSaveSuccess = (id) => {
+  const handleSaveSuccess = (id, action) => {
     setSelectedActivoId(id);
     setCurrentTab('activo_detail');
+    setToastMessage({
+      msg: action === 'created'
+        ? `El activo ${id} se creó correctamente.`
+        : `Los cambios del activo ${id} se guardaron correctamente.`,
+      type: 'success'
+    });
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       {/* Sidebar fijo a la izquierda */}
       <Sidebar
-        currentTab={currentTab}
+        currentTab={tabActiva}
         setTab={(tab) => {
+          if (!puedeAccederATab(tab)) return;
           setCurrentTab(tab);
           setSelectedActivoId(null);
           setEditingActivo(null);
         }}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={handleSidebarClose}
       />
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Cerrar menú de navegación"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      {toastMessage && (
+        <div
+          className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : 'alert-success'} toast-slide-in`}
+          role="status"
+          aria-live="polite"
+          style={{ position: 'fixed', top: 76, right: 24, zIndex: 100, boxShadow: 'var(--shadow-lg)' }}
+        >
+          {toastMessage.type === 'danger' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+          <span>{toastMessage.msg}</span>
+        </div>
+      )}
 
       {/* Contenido principal a la derecha */}
       <div className="main-content">
-        <Navbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+        <Navbar
+          isSidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((open) => !open)}
+          onLogout={handleLogout}
+        />
 
         <main style={{ flex: 1 }}>
-          {currentTab === 'dashboard' && (
+          {tabActiva === 'dashboard' && (
             <DashboardScreen
               onSelectActivo={handleSelectActivo}
               onViewAllActivos={() => setCurrentTab('activos')}
             />
           )}
 
-          {currentTab === 'activos' && (
+          {tabActiva === 'activos' && (
             <ActivosListScreen
               onSelectActivo={handleSelectActivo}
               onNewActivo={handleNewActivo}
@@ -80,7 +177,7 @@ export function App() {
             />
           )}
 
-          {currentTab === 'activo_detail' && (
+          {tabActiva === 'activo_detail' && (
             <ActivoDetailScreen
               idActivo={selectedActivoId}
               onBack={() => setCurrentTab('activos')}
@@ -88,7 +185,7 @@ export function App() {
             />
           )}
 
-          {currentTab === 'activo_create' && (
+          {tabActiva === 'activo_create' && (
             <ActivoFormScreen
               isEdit={false}
               onSaveSuccess={handleSaveSuccess}
@@ -96,7 +193,7 @@ export function App() {
             />
           )}
 
-          {currentTab === 'activo_edit' && (
+          {tabActiva === 'activo_edit' && (
             <ActivoFormScreen
               isEdit={true}
               initialData={editingActivo}
@@ -112,15 +209,20 @@ export function App() {
             />
           )}
 
-          {currentTab === 'reportes' && (
+          {tabActiva === 'reportes' && (
             <ReportesScreen onSelectActivo={handleSelectActivo} />
           )}
 
-          {currentTab === 'importar' && (
+          {tabActiva === 'conciliacion' && (
+            <ConciliacionScreen />
+          )}
+
+          {tabActiva === 'importar' && (
             <ImportarScreen onActivosImportados={() => setCurrentTab('activos')} />
           )}
 
-          {currentTab === 'contrato' && <ContratoApiScreen />}
+          {tabActiva === 'seguridad' && <SeguridadScreen />}
+          {tabActiva === 'contrato' && <ContratoApiScreen />}
         </main>
       </div>
     </div>

@@ -10,5 +10,9 @@ Thumbs.db
 *.db-shm
 *.db-wal
 
-# Variables de entorno
+# Respaldos de la base (contienen datos del inventario)
+db/backups/
+
+# Variables de entorno (nunca subir secretos)
 backend/.env
+frontend/.env

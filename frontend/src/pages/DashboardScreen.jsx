@@ -84,8 +84,9 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
   const { totales, por_categoria, por_estado, por_unidad } = resumen;
   const totalGarantiasAlertas = (alertas?.garantias_por_vencer?.length || 0) + (alertas?.licencias_por_vencer?.length || 0);
 
-  // Cálculo de KPIs según Tabla 5 del Informe
-  const kpiOE1 = Math.round((totales.operativos / totales.total_activos) * 100); // % validados
+  // Cálculo de KPIs del Plan Informático
+  const kpiOE1 = totales.porcentaje_activos_validados;
+  const metaOE1Cumplida = kpiOE1 >= 95;
   const kpiGarantiasVigentes = Math.round(((totales.total_activos - totalGarantiasAlertas) / totales.total_activos) * 100);
 
   // Filtrado de alertas en Alert Center
@@ -185,12 +186,12 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
         </div>
       </div>
 
-      {/* SECCIÓN 1: TABLERO DE CUMPLIMIENTO DE OBJETIVOS (TABLA 5 DEL INFORME) */}
+      {/* SECCIÓN 1: TABLERO DE CUMPLIMIENTO DE OBJETIVOS */}
       <div className="card" style={{ borderLeft: '4px solid #2563eb' }}>
         <div className="card-header">
           <div className="card-title">
             <Target size={18} style={{ color: '#2563eb' }} />
-            <span>Monitoreo de Indicadores y Metas del Plan Informático (Tabla 5 del Informe)</span>
+            <span>Monitoreo de Indicadores y Metas del Plan Informático</span>
           </div>
           <span className="badge badge-success">Evaluación en Línea</span>
         </div>
@@ -203,15 +204,17 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
               <span className="okr-kpi-badge">IND-01</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '6px 0' }}>
-              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669' }}>{kpiOE1}%</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: metaOE1Cumplida ? '#059669' : '#d97706' }}>{kpiOE1}%</span>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Meta: ≥ 95%</span>
             </div>
             <div className="okr-meter-bar">
-              <div className="okr-meter-fill" style={{ width: `${Math.min(kpiOE1, 100)}%`, background: '#059669' }} />
+              <div className="okr-meter-fill" style={{ width: `${Math.min(kpiOE1, 100)}%`, background: metaOE1Cumplida ? '#059669' : '#d97706' }} />
             </div>
             <div className="okr-footer">
-              <span>Condición: Estado Bueno / Regular</span>
-              <span style={{ color: '#059669', fontWeight: 600 }}>✓ Meta Cumplida</span>
+              <span>{totales.activos_validados} de {totales.total_activos} con custodio y revisión registrada</span>
+              <span style={{ color: metaOE1Cumplida ? '#059669' : '#d97706', fontWeight: 600 }}>
+                {metaOE1Cumplida ? '✓ Meta Cumplida' : 'Pendiente de meta'}
+              </span>
             </div>
           </div>
 
@@ -230,7 +233,7 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
             </div>
             <div className="okr-footer">
               <span>Roles: Admin TI, Jefatura, Lectura</span>
-              <span style={{ color: '#2563eb', fontWeight: 600 }}>✓ En Norma Ley 21.663</span>
+              <span style={{ color: '#2563eb', fontWeight: 600 }}>✓ Accesos protegidos</span>
             </div>
           </div>
 
@@ -297,21 +300,22 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
             <p style={{ fontSize: '0.8rem' }}>Todos los equipos o contratos seleccionados se encuentran vigentes.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 390px), 1fr))', gap: 12 }}>
             {alertasFiltradas.map((a) => {
               const esUrgente = a.dias_restantes <= 30;
               return (
                 <div 
                   key={a.id_activo}
                   className={`alert-card-item ${esUrgente ? 'urgente' : 'advertencia'}`}
+                  style={{ borderLeft: `4px solid ${esUrgente ? 'var(--danger)' : 'var(--warning)'}` }}
                 >
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem', color: '#1e40af' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem', color: '#1e40af', whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {a.id_activo}
                       </span>
                       <CategoryBadge categoria={a.categoria} />
-                      <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>{a.tipo}</span>
+                      <span className="badge badge-secondary" style={{ fontSize: '0.7rem', flexShrink: 0 }}>{a.tipo}</span>
                     </div>
 
                     <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -323,7 +327,7 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     <div style={{
                       display: 'inline-block',
                       padding: '4px 10px',
@@ -332,7 +336,8 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
                       fontWeight: 700,
                       background: esUrgente ? '#fee2e2' : '#fef3c7',
                       color: esUrgente ? '#b91c1c' : '#b45309',
-                      border: `1px solid ${esUrgente ? '#fca5a5' : '#fde68a'}`
+                      border: `1px solid ${esUrgente ? '#fca5a5' : '#fde68a'}`,
+                      whiteSpace: 'nowrap'
                     }}>
                       {a.dias_restantes > 0 ? `${a.dias_restantes} días` : '¡Vence Hoy!'}
                     </div>

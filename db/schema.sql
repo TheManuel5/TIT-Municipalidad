@@ -11,13 +11,20 @@ CREATE TABLE IF NOT EXISTS unidades (
 );
 
 -- Tabla de Usuarios y Roles
+-- password guarda SOLO el hash bcrypt (bcryptjs, costo 10). Nunca texto plano.
+-- activo = 0 revoca el acceso de inmediato (el middleware de autenticación lo verifica
+-- en cada petición, aunque el token JWT siga vigente).
 CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     nombre TEXT NOT NULL,
     rol TEXT NOT NULL CHECK (rol IN ('admin_ti', 'jefatura', 'lectura')),
-    unidad TEXT NOT NULL
+    unidad TEXT NOT NULL,
+    activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1)),
+    creado_en TEXT,
+    actualizado_en TEXT,
+    ultimo_acceso TEXT
 );
 
 -- Tabla de Proveedores (Ley 19.886)
@@ -79,8 +86,104 @@ CREATE TABLE IF NOT EXISTS historial (
     custodio_nuevo TEXT,
     motivo TEXT,
     detalles TEXT,
-    FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE CASCADE
+    -- RESTRICT: un activo con historial no se puede eliminar físicamente (la baja es lógica,
+    -- vía estado_operativo = 'De baja'). Con CASCADE, borrar o reemplazar un activo
+    -- eliminaba en silencio toda su bitácora.
+    FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE RESTRICT
 );
+
+-- Conciliación física del inventario: muestra persistida del 10% y resultados por activo.
+CREATE TABLE IF NOT EXISTS conciliaciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha_inicio TEXT NOT NULL,
+    fecha_cierre TEXT,
+    usuario TEXT NOT NULL,
+    total_activos INTEGER NOT NULL CHECK (total_activos >= 0),
+    tamano_muestra INTEGER NOT NULL CHECK (tamano_muestra >= 0),
+    inspeccionados INTEGER NOT NULL DEFAULT 0 CHECK (inspeccionados >= 0),
+    discrepancias INTEGER NOT NULL DEFAULT 0 CHECK (discrepancias >= 0),
+    porcentaje_discrepancias REAL,
+    resultado TEXT NOT NULL DEFAULT 'En curso' CHECK (resultado IN ('En curso', 'Cumple', 'No cumple'))
+);
+
+CREATE TABLE IF NOT EXISTS conciliacion_activos (
+    id_conciliacion INTEGER NOT NULL,
+    id_activo TEXT NOT NULL,
+    datos_registrados TEXT NOT NULL,
+    datos_observados TEXT,
+    encontrado INTEGER CHECK (encontrado IN (0, 1)),
+    resultado TEXT NOT NULL DEFAULT 'Pendiente' CHECK (resultado IN ('Pendiente', 'Coincide', 'Discrepancia')),
+    detalle TEXT,
+    fecha_verificacion TEXT,
+    usuario_verificacion TEXT,
+    PRIMARY KEY (id_conciliacion, id_activo),
+    FOREIGN KEY (id_conciliacion) REFERENCES conciliaciones(id) ON DELETE RESTRICT,
+    FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE RESTRICT
+);
+
+DROP TRIGGER IF EXISTS trg_conciliacion_activo_no_rewrite;
+CREATE TRIGGER trg_conciliacion_activo_no_rewrite
+BEFORE UPDATE ON conciliacion_activos
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM conciliaciones c
+    WHERE c.id = OLD.id_conciliacion
+      AND c.resultado = 'En curso'
+      AND EXISTS (
+          SELECT 1
+          FROM conciliacion_activos pendiente
+          WHERE pendiente.id_conciliacion = OLD.id_conciliacion
+            AND pendiente.resultado = 'Pendiente'
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Solo se pueden editar inspecciones si la conciliación sigue en curso y quedan activos pendientes.');
+END;
+
+-- Bitácora inmutable (Ley N.º 21.459 / Ley N.º 20.285): solo se permite INSERT.
+-- Cualquier intento de modificar o borrar un evento se rechaza a nivel de base de datos,
+-- independiente de lo que haga la capa de aplicación.
+CREATE TRIGGER IF NOT EXISTS trg_historial_no_update
+BEFORE UPDATE ON historial
+BEGIN
+    SELECT RAISE(ABORT, 'La bitácora de historial es inmutable: no se permite modificar eventos.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_historial_no_delete
+BEFORE DELETE ON historial
+BEGIN
+    SELECT RAISE(ABORT, 'La bitácora de historial es inmutable: no se permite eliminar eventos.');
+END;
+
+-- Registro de auditoría de seguridad (RNF-6, Ley N.º 21.663 Marco de Ciberseguridad,
+-- Ley N.º 20.285 Transparencia): inicios de sesión, operaciones de escritura,
+-- exportaciones, gestión de usuarios y respaldos. Inmutable: solo INSERT.
+-- Nunca se registran contraseñas ni el cuerpo completo de las peticiones.
+CREATE TABLE IF NOT EXISTS auditoria (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL,
+    usuario TEXT,
+    rol TEXT,
+    ip TEXT,
+    accion TEXT NOT NULL,
+    metodo TEXT,
+    ruta TEXT,
+    estado_http INTEGER,
+    resultado TEXT NOT NULL CHECK (resultado IN ('OK', 'RECHAZADO', 'ERROR')),
+    detalle TEXT
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_auditoria_no_update
+BEFORE UPDATE ON auditoria
+BEGIN
+    SELECT RAISE(ABORT, 'El registro de auditoría es inmutable: no se permite modificar entradas.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_auditoria_no_delete
+BEFORE DELETE ON auditoria
+BEGIN
+    SELECT RAISE(ABORT, 'El registro de auditoría es inmutable: no se permite eliminar entradas.');
+END;
 
 -- Índices de Rendimiento para Búsquedas y Filtros
 CREATE INDEX IF NOT EXISTS idx_activos_categoria ON activos(categoria);
@@ -89,3 +192,7 @@ CREATE INDEX IF NOT EXISTS idx_activos_unidad ON activos(unidad);
 CREATE INDEX IF NOT EXISTS idx_activos_garantia ON activos(fecha_garantia);
 CREATE INDEX IF NOT EXISTS idx_historial_activo ON historial(id_activo);
 CREATE INDEX IF NOT EXISTS idx_usuarios_username ON usuarios(username);
+CREATE INDEX IF NOT EXISTS idx_auditoria_fecha ON auditoria(fecha);
+CREATE INDEX IF NOT EXISTS idx_auditoria_usuario ON auditoria(usuario);
+CREATE INDEX IF NOT EXISTS idx_conciliaciones_fecha ON conciliaciones(fecha_inicio);
+CREATE INDEX IF NOT EXISTS idx_conciliacion_activos_activo ON conciliacion_activos(id_activo);

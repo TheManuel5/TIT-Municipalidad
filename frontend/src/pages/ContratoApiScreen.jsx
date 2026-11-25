@@ -17,13 +17,26 @@ export function ContratoApiScreen() {
     { num: 4, method: 'GET', path: '/api/activos/:id/historial', desc: 'Bitácora inmutable de eventos (ALTA, TRASLADO, EDICION, BAJA).', resp: '{ "success": true, "data": [{ "id": 1, "tipo_evento": "ALTA", "motivo": "Recepción..." }] }' },
     { num: 5, method: 'GET', path: '/api/alertas?dias=60', desc: 'Alertas de vencimiento de garantías y licencias en los próximos X días.', resp: '{ "success": true, "data": { "garantias_por_vencer": [...], "licencias_por_vencer": [...] } }' },
     { num: 6, method: 'GET', path: '/api/catalogos', desc: 'Listas maestras para categorías, estados operativos, unidades y criticidad.', resp: '{ "success": true, "data": { "categorias": [...], "unidades": [...] } }' },
-    { num: 7, method: 'POST', path: '/api/activos', desc: 'Alta de un nuevo activo. Exclusivo admin_ti. Registra automáticamente evento ALTA.', resp: '{ "success": true, "message": "Activo registrado", "data": { "id_activo": "SP-HW-0099" } }' },
+    { num: 7, method: 'POST', path: '/api/activos', desc: 'Alta de un nuevo activo. Exclusivo admin_ti. Requiere recepción física/documental y contrato/OC.', resp: '{ "success": true, "data": { "id_activo": "SP-HW-0099" } }' },
     { num: 8, method: 'PUT', path: '/api/activos/:id', desc: 'Modificación de especificaciones de un activo. Exclusivo admin_ti. Registra EDICION.', resp: '{ "success": true, "message": "Activo actualizado" }' },
     { num: 9, method: 'POST', path: '/api/activos/:id/traslado', desc: 'Traslado de unidad, ubicación y custodio. Exclusivo admin_ti. Registra TRASLADO.', resp: '{ "success": true, "message": "Traslado registrado", "data": { ... } }' },
     { num: 10, method: 'POST', path: '/api/activos/:id/baja', desc: 'Baja del activo. Motivo estrictamente obligatorio. Registra evento BAJA.', resp: '{ "success": true, "message": "Activo dado de baja", "data": { "estado_operativo": "De baja" } }' },
-    { num: 11, method: 'GET', path: '/api/reportes/resumen', desc: 'Consolidados de inventario por categoría, estado operativo y unidad municipal.', resp: '{ "success": true, "data": { "totales": { ... }, "por_categoria": [...], "por_unidad": [...] } }' },
+    { num: 11, method: 'GET', path: '/api/reportes/resumen', desc: 'Consolidados de inventario por categoría, estado operativo y unidad municipal, con porcentaje de activos validados.', resp: '{ "success": true, "data": { "totales": { "total_activos": 106, "activos_validados": 106, "porcentaje_activos_validados": 100 }, "por_categoria": [...], "por_unidad": [...] } }' },
     { num: 12, method: 'GET', path: '/api/reportes/costos', desc: 'Métricas de inversión inicial y gasto recurrente TCO proyectado a 5 años.', resp: '{ "success": true, "data": { "inversion_total_inicial": 68450000, "tco_estimado_5_anos": ... } }' },
-    { num: 13, method: 'POST', path: '/api/importar', desc: 'Carga masiva por CSV con reporte de filas válidas y erróneas.', resp: '{ "success": true, "data": { "resumen": { "total_procesadas": 15, "validas": 13, "con_error": 2 } } }' }
+    { num: 13, method: 'POST', path: '/api/importar', desc: 'Carga masiva de filas CSV procesadas por el frontend. Requiere confirmación de recepción y contrato/OC por fila.', resp: '{ "success": true, "data": { "resumen": { "total_procesadas": 15, "validas": 13, "con_error": 2 } } }' },
+    { num: 14, method: 'GET', path: '/api/reportes/garantias?dias=90', desc: 'Garantías/licencias que vencen dentro del período; excluye vencidas y activos dados de baja.', resp: '{ "success": true, "data": { "garantias_por_vencer": [...], "licencias_por_vencer": [...] } }' },
+    { num: 15, method: 'GET', path: '/api/exportar?formato=csv|json', desc: 'Exporta inventario según formato y alcance permitido por el rol.', resp: 'Archivo CSV o arreglo JSON de activos.' },
+    { num: 16, method: 'GET', path: '/api/conciliaciones', desc: 'Lista conciliaciones físicas, su avance y su resultado.', resp: '{ "success": true, "data": [...] }' },
+    { num: 17, method: 'GET', path: '/api/conciliaciones/:id', desc: 'Detalle de conciliación y observaciones de los activos inspeccionados.', resp: '{ "success": true, "data": { "activos": [...] } }' },
+    { num: 18, method: 'POST', path: '/api/conciliaciones', desc: 'Inicia una muestra aleatoria del 10% de activos vigentes. Solo admin_ti.', resp: '{ "success": true, "data": { "tamano_muestra": 11, "resultado": "En curso" } }' },
+    { num: 19, method: 'PUT', path: '/api/conciliaciones/:id/activos/:id_activo', desc: 'Registra la revisión física por ID, ubicación, unidad, custodio y estado. Cierra al completar toda la muestra.', resp: '{ "success": true, "data": { "porcentaje_discrepancias": 0, "resultado": "Cumple" } }' },
+    { num: 20, method: 'POST', path: '/api/activos/:id/mantenimiento', desc: 'Registra mantención preventiva o correctiva y agrega el evento a la bitácora. Solo admin_ti.', resp: '{ "success": true, "data": { "tipo_mantenimiento": "Correctiva", "ultimo_mantenimiento": "2026-11-24" } }' },
+    { num: 21, method: 'PUT', path: '/api/auth/password', desc: 'Cambio de la propia contraseña (cualquier rol). Política: 8+ caracteres, letras y números.', resp: '{ "success": true, "message": "Contraseña actualizada correctamente." }' },
+    { num: 22, method: 'GET', path: '/api/usuarios', desc: 'Lista de cuentas sin contraseñas. Exclusivo admin_ti.', resp: '{ "success": true, "data": [ { "username": "admin", "rol": "admin_ti", "activo": true } ] }' },
+    { num: 23, method: 'POST', path: '/api/usuarios', desc: 'Crea una cuenta (aprobación de acceso). Contraseña guardada con bcrypt. Exclusivo admin_ti.', resp: '{ "success": true, "data": { "id": 4, "username": "jefe_dom", "activo": true } }' },
+    { num: 24, method: 'PUT', path: '/api/usuarios/:id', desc: 'Cambia rol/unidad o revoca (activo=false) con efecto inmediato. Exclusivo admin_ti.', resp: '{ "success": true, "data": { "id": 4, "activo": false } }' },
+    { num: 25, method: 'PUT', path: '/api/usuarios/:id/password', desc: 'Restablece la contraseña de un usuario. Exclusivo admin_ti.', resp: '{ "success": true, "message": "Contraseña restablecida." }' },
+    { num: 26, method: 'GET', path: '/api/auditoria', desc: 'Registro de auditoría inmutable (logins, escrituras, exportaciones, usuarios, respaldos). admin_ti y lectura.', resp: '{ "success": true, "data": [ { "accion": "LOGIN_OK", "usuario": "admin", "resultado": "OK" } ] }' }
   ];
 
   return (
@@ -43,7 +56,7 @@ export function ContratoApiScreen() {
           Regla de Oro del Proyecto TIT (Proyecto A)
         </h3>
         <p style={{ fontSize: '0.875rem', color: '#334155' }}>
-          El archivo <code>docs/contrato-api.md</code> es la referencia única y definitiva de todo el equipo de trabajo. Define los 13 endpoints exactos, los nombres de campo de la base de datos (Tabla 7 del Informe), las reglas de seguridad de roles y los JSON de respuesta.
+          El archivo <code>docs/contrato-api.md</code> es la referencia única y definitiva de todo el equipo de trabajo. Define los 26 endpoints, los nombres de campo de la base de datos, las reglas de seguridad de roles y los JSON de respuesta.
         </p>
       </div>
 
@@ -94,12 +107,12 @@ export function ContratoApiScreen() {
         </div>
       </div>
 
-      {/* Lista de los 13 Endpoints */}
+      {/* Lista de los 26 Endpoints */}
       <div className="card">
         <div className="card-header">
           <div className="card-title">
             <Server size={18} />
-            <span>Los 13 Endpoints Oficiales de la API</span>
+            <span>Los 26 Endpoints Oficiales de la API</span>
           </div>
           <span className="badge badge-secondary">Host: http://localhost:3000/api</span>
         </div>

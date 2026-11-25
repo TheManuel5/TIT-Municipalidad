@@ -27,7 +27,7 @@ import {
   Calendar,
   Layers
 } from 'lucide-react';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
 
 export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo }) {
   const { user } = useAuth();
@@ -131,7 +131,7 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
       {/* Toast Feedback */}
       {toastMessage && (
         <div 
-          className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : 'alert-success'}`}
+          className={`alert ${toastMessage.type === 'danger' ? 'alert-danger' : 'alert-success'} toast-slide-in`}
           style={{ position: 'fixed', top: 20, right: 24, zIndex: 9999, boxShadow: 'var(--shadow-lg)' }}
         >
           {toastMessage.type === 'danger' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
@@ -146,7 +146,7 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
             Inventario de Activos Tecnológicos
           </h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Catálogo unificado y ciclo de vida de equipamiento municipal (Tabla 7 del Informe)
+            Catálogo unificado y ciclo de vida de equipamiento municipal
           </p>
         </div>
 
@@ -215,7 +215,7 @@ export function ActivosListScreen({ onSelectActivo, onNewActivo, onEditActivo })
         <div className="alert alert-info" style={{ marginBottom: 16 }}>
           <Lock size={18} />
           <div>
-            <strong>Perfil de Jefatura de Unidad ({user.unidad}):</strong> Su visualización está restringida exclusivamente a los activos de su dependencia conforme al principio de responsabilidad compartida (Sección 8.1 del Informe).
+            <strong>Perfil de Jefatura de Unidad ({user.unidad}):</strong> Su visualización está restringida exclusivamente a los activos de su dependencia conforme al principio de responsabilidad compartida.
           </div>
         </div>
       )}

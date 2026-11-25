@@ -4,27 +4,31 @@ import {
   Boxes, 
   BarChart3, 
   FileUp, 
-  FileCode2, 
   ShieldCheck, 
   Building2,
-  Lock
+  ClipboardCheck,
+  KeyRound
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export function Sidebar({ currentTab, setTab, isOpen, onClose }) {
   const { user } = useAuth();
   const isAdmin = user?.rol === 'admin_ti';
+  const puedeConsultarConciliaciones = isAdmin || user?.rol === 'lectura';
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'activos', label: 'Inventario de Activos', icon: Boxes },
     { id: 'reportes', label: 'Reportes y Métricas', icon: BarChart3 },
-    { id: 'importar', label: 'Importar / Exportar', icon: FileUp, badge: !isAdmin ? 'Restringido' : null },
-    { id: 'contrato', label: 'Contrato de API (Docs)', icon: FileCode2 }
+    ...(puedeConsultarConciliaciones
+      ? [{ id: 'conciliacion', label: 'Conciliación Física', icon: ClipboardCheck }]
+      : []),
+    ...(isAdmin ? [{ id: 'importar', label: 'Importar / Exportar', icon: FileUp }] : []),
+    { id: 'seguridad', label: 'Seguridad y Accesos', icon: KeyRound }
   ];
 
   return (
-    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+    <aside id="app-navigation" className={`sidebar ${isOpen ? 'open' : 'collapsed'}`}>
       {/* Brand Header */}
       <div style={{ padding: '24px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ 
@@ -141,7 +145,6 @@ export function Sidebar({ currentTab, setTab, isOpen, onClose }) {
           <Building2 size={13} />
           <span>Provincia de Osorno, Los Lagos</span>
         </div>
-        <div>Censo 2024: 10.883 hab. (51,5% rural)</div>
       </div>
     </aside>
   );

@@ -10,6 +10,7 @@ const router = express.Router();
 const { verificarToken } = require('../middlewares/auth');
 const { requerirRol } = require('../middlewares/roles');
 const db = require('../../db/database');
+const { parseActivoDto } = require('../dtos/activo.dto');
 
 // Listas cerradas del Contrato de API (Sección 2 y 4.2)
 const CATEGORIAS_VALIDAS = ['PC', 'Portátil', 'Servidor', 'Red', 'Impresora', 'Software', 'Nube'];
@@ -24,7 +25,18 @@ const soloAdminTI = [verificarToken, requerirRol('admin_ti')];
  * Registra automáticamente el evento 'ALTA' en la bitácora inmutable de historial
  */
 router.post('/', soloAdminTI, (req, res) => {
-  const data = req.body || {};
+  const parsed = parseActivoDto(req.body, { create: true });
+  if (parsed.errors.length) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Revise los datos del activo.',
+        details: parsed.errors
+      }
+    });
+  }
+  const data = parsed.data;
   const {
     id_activo,
     categoria,
@@ -43,55 +55,40 @@ router.post('/', soloAdminTI, (req, res) => {
     licencias_asociadas,
     proveedor,
     contrato_oc,
-    costo_inicial = 0,
-    costo_anual = 0,
+    costo_inicial,
+    costo_anual,
     configuracion_red,
-    fecha_revision,
-    responsable_revision,
     motivo
   } = data;
 
-  // 1. Validaciones de presencia
-  if (!id_activo || !id_activo.trim()) {
+  if (data.recepcion_verificada !== true) {
     return res.status(400).json({
       success: false,
       error: {
         code: 'BAD_REQUEST',
-        message: 'El identificador institucional (id_activo) es obligatorio (ej. SP-HW-0099).',
+        message: 'Confirme la verificación física y documental de la recepción antes de registrar el activo.',
         details: []
       }
     });
   }
 
-  if (!categoria || !marca_modelo || !ubicacion || !unidad || !custodio) {
+  if (!db.prepare('SELECT 1 FROM unidades WHERE nombre = ?').get(unidad.trim())) {
     return res.status(400).json({
       success: false,
       error: {
         code: 'BAD_REQUEST',
-        message: 'Faltan campos obligatorios: categoria, marca_modelo, ubicacion, unidad y custodio son requeridos.',
+        message: `La unidad '${unidad}' no está registrada en el catálogo municipal.`,
         details: []
       }
     });
   }
 
-  // 2. Validación de listas cerradas
-  if (!CATEGORIAS_VALIDAS.includes(categoria)) {
+  if (estado_operativo === 'De baja') {
     return res.status(400).json({
       success: false,
       error: {
         code: 'BAD_REQUEST',
-        message: `Categoría '${categoria}' no válida. Valores permitidos: ${CATEGORIAS_VALIDAS.join(', ')}.`,
-        details: []
-      }
-    });
-  }
-
-  if (!ESTADOS_VALIDOS.includes(estado_operativo)) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'BAD_REQUEST',
-        message: `Estado operativo '${estado_operativo}' no válido. Valores permitidos: ${ESTADOS_VALIDOS.join(', ')}.`,
+        message: 'Use el procedimiento de baja para registrar activos dados de baja.',
         details: []
       }
     });
@@ -158,11 +155,11 @@ router.post('/', soloAdminTI, (req, res) => {
         licencias_asociadas || null,
         proveedor || 'Sin proveedor asignado',
         contrato_oc || 'Sin OC registrada',
-        Number(costo_inicial) || 0,
-        Number(costo_anual) || 0,
+        Number(costo_inicial),
+        Number(costo_anual),
         configuracion_red || null,
-        fecha_revision || fechaHoy,
-        responsable_revision || req.user.nombre,
+        fechaHoy,
+        req.user.nombre || req.user.username,
         null
       );
 
@@ -176,7 +173,7 @@ router.post('/', soloAdminTI, (req, res) => {
         null,
         custodio.trim(),
         motivo || 'Alta inicial del activo en el sistema de inventario tecnológico',
-        'Incorporación de activo nuevo según Plan Informático Municipal'
+        `Recepción física y documental verificada por ${req.user.nombre || req.user.username} antes del alta; documento: ${contrato_oc.trim()}.`
       );
     });
 
@@ -206,7 +203,18 @@ router.post('/', soloAdminTI, (req, res) => {
  */
 router.put('/:id', soloAdminTI, (req, res) => {
   const { id } = req.params;
-  const data = req.body || {};
+  const parsed = parseActivoDto(req.body);
+  if (parsed.errors.length) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Revise los datos del activo.',
+        details: parsed.errors
+      }
+    });
+  }
+  const data = parsed.data;
 
   const activoActual = db.prepare('SELECT * FROM activos WHERE id_activo = ?').get(id);
   if (!activoActual) {
@@ -243,6 +251,45 @@ router.put('/:id', soloAdminTI, (req, res) => {
     });
   }
 
+  if (data.estado_operativo === 'De baja' && activoActual.estado_operativo !== 'De baja') {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Use el procedimiento de baja para registrar la causal y la bitácora correspondiente.',
+        details: []
+      }
+    });
+  }
+
+  if (data.unidad && !db.prepare('SELECT 1 FROM unidades WHERE nombre = ?').get(data.unidad)) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: `La unidad '${data.unidad}' no está registrada en el catálogo municipal.`,
+        details: []
+      }
+    });
+  }
+
+  const fechaAdquisicion = data.fecha_adquisicion !== undefined
+    ? data.fecha_adquisicion
+    : activoActual.fecha_adquisicion;
+  const fechaGarantia = data.fecha_garantia !== undefined
+    ? data.fecha_garantia
+    : activoActual.fecha_garantia;
+  if (fechaAdquisicion && fechaGarantia && fechaGarantia < fechaAdquisicion) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'La fecha de garantía no puede ser anterior a la fecha de adquisición.',
+        details: []
+      }
+    });
+  }
+
   const updateFields = {
     categoria: data.categoria !== undefined ? data.categoria : activoActual.categoria,
     marca_modelo: data.marca_modelo !== undefined ? data.marca_modelo : activoActual.marca_modelo,
@@ -263,9 +310,9 @@ router.put('/:id', soloAdminTI, (req, res) => {
     costo_inicial: data.costo_inicial !== undefined ? Number(data.costo_inicial) : activoActual.costo_inicial,
     costo_anual: data.costo_anual !== undefined ? Number(data.costo_anual) : activoActual.costo_anual,
     configuracion_red: data.configuracion_red !== undefined ? data.configuracion_red : activoActual.configuracion_red,
-    fecha_revision: data.fecha_revision !== undefined ? data.fecha_revision : new Date().toISOString().split('T')[0],
-    responsable_revision: data.responsable_revision !== undefined ? data.responsable_revision : req.user.nombre,
-    motivo_baja: data.motivo_baja !== undefined ? data.motivo_baja : activoActual.motivo_baja
+    fecha_revision: new Date().toISOString().split('T')[0],
+    responsable_revision: req.user.nombre || req.user.username,
+    motivo_baja: activoActual.motivo_baja
   };
 
   const updateStmt = db.prepare(`
@@ -402,6 +449,17 @@ router.post('/:id/traslado', soloAdminTI, (req, res) => {
     });
   }
 
+  if (activoActual.estado_operativo === 'De baja') {
+    return res.status(409).json({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+        message: `No se puede trasladar el activo '${id}': está dado de baja.`,
+        details: []
+      }
+    });
+  }
+
   const updateTraslado = db.prepare(`
     UPDATE activos SET
       unidad = ?,
@@ -499,6 +557,17 @@ router.post('/:id/baja', soloAdminTI, (req, res) => {
     });
   }
 
+  if (activoActual.estado_operativo === 'De baja') {
+    return res.status(409).json({
+      success: false,
+      error: {
+        code: 'CONFLICT',
+        message: `El activo '${id}' ya se encuentra dado de baja.`,
+        details: []
+      }
+    });
+  }
+
   const updateBaja = db.prepare(`
     UPDATE activos SET
       estado_operativo = 'De baja',
@@ -558,6 +627,113 @@ router.post('/:id/baja', soloAdminTI, (req, res) => {
       }
     });
   }
+});
+
+/**
+ * Endpoint 20: POST /api/activos/:id/mantenimiento
+ * Registro de una mantención preventiva o correctiva (RF-2: trazabilidad de mantenciones).
+ * Responsable: Alfredo (agregado para cubrir el evento MANTENIMIENTO de la bitácora)
+ *
+ * Body: {
+ *   tipo_mantenimiento: 'Preventiva' | 'Correctiva'   (obligatorio)
+ *   descripcion: string                                (obligatorio: qué se hizo)
+ *   fecha?: 'YYYY-MM-DD'                               (por defecto hoy; no puede ser futura)
+ *   estado_resultante?: 'Bueno' | 'Regular' | 'Malo' | 'En reparación'
+ *   responsable?: string                               (técnico o proveedor que la realizó)
+ *   costo?: number                                     (CLP, informativo)
+ * }
+ * Actualiza ultimo_mantenimiento, tipo_mantenimiento y (opcional) estado_operativo,
+ * y registra el evento MANTENIMIENTO en la bitácora inmutable.
+ */
+router.post('/:id/mantenimiento', soloAdminTI, (req, res) => {
+  const { id } = req.params;
+  const { tipo_mantenimiento, descripcion, fecha, estado_resultante, responsable, costo } = req.body || {};
+  const TIPOS = ['Preventiva', 'Correctiva'];
+  const ESTADOS_RESULTANTES = ['Bueno', 'Regular', 'Malo', 'En reparación'];
+  const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: process.env.APP_TZ || 'America/Santiago' });
+  const errores = [];
+
+  if (!TIPOS.includes(tipo_mantenimiento)) {
+    errores.push({ campo: 'tipo_mantenimiento', mensaje: `Debe ser: ${TIPOS.join(' o ')}.` });
+  }
+  if (typeof descripcion !== 'string' || !descripcion.trim()) {
+    errores.push({ campo: 'descripcion', mensaje: 'Describa el trabajo realizado.' });
+  }
+  const fechaMant = fecha === undefined || fecha === '' ? hoy : fecha;
+  if (typeof fechaMant !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fechaMant) || Number.isNaN(Date.parse(fechaMant))) {
+    errores.push({ campo: 'fecha', mensaje: 'Formato YYYY-MM-DD.' });
+  } else if (fechaMant > hoy) {
+    errores.push({ campo: 'fecha', mensaje: 'La fecha de mantención no puede ser futura.' });
+  }
+  if (estado_resultante !== undefined && estado_resultante !== '' && !ESTADOS_RESULTANTES.includes(estado_resultante)) {
+    errores.push({ campo: 'estado_resultante', mensaje: `Debe ser: ${ESTADOS_RESULTANTES.join(', ')}. Para dar de baja use el endpoint de baja.` });
+  }
+  if (costo !== undefined && costo !== '' && (typeof costo !== 'number' || !Number.isFinite(costo) || costo <= 0)) {
+    errores.push({ campo: 'costo', mensaje: 'Debe ser un número mayor que 0.' });
+  }
+
+  if (errores.length) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'BAD_REQUEST', message: 'Datos de mantención inválidos.', details: errores }
+    });
+  }
+
+  const activo = db.prepare('SELECT * FROM activos WHERE id_activo = ?').get(id);
+  if (!activo) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: `Activo con identificador '${id}' no encontrado.`, details: [] }
+    });
+  }
+  if (activo.estado_operativo === 'De baja') {
+    return res.status(409).json({
+      success: false,
+      error: { code: 'CONFLICT', message: 'No se puede registrar mantención en un activo dado de baja.', details: [] }
+    });
+  }
+
+  const nuevoEstado = estado_resultante || activo.estado_operativo;
+  // Si ya hay una mantención más reciente registrada, no se retrocede la fecha
+  const ultimo = !activo.ultimo_mantenimiento || fechaMant >= activo.ultimo_mantenimiento;
+
+  const detalles = [
+    `Estado: ${activo.estado_operativo} -> ${nuevoEstado}`,
+    responsable ? `Responsable: ${String(responsable).trim()}` : null,
+    costo !== undefined && costo !== '' ? `Costo: $${Number(costo).toLocaleString('es-CL')} CLP` : null,
+    `Fecha de ejecución: ${fechaMant}`
+  ].filter(Boolean).join(' | ');
+
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE activos SET
+        ultimo_mantenimiento = CASE WHEN @ultimo THEN @fecha ELSE ultimo_mantenimiento END,
+        tipo_mantenimiento   = CASE WHEN @ultimo THEN @tipo ELSE tipo_mantenimiento END,
+        estado_operativo     = @estado
+      WHERE id_activo = @id
+    `).run({ ultimo: ultimo ? 1 : 0, fecha: fechaMant, tipo: tipo_mantenimiento, estado: nuevoEstado, id });
+
+    db.prepare(`
+      INSERT INTO historial (id_activo, fecha, tipo_evento, usuario, unidad_origen, unidad_destino,
+                             custodio_anterior, custodio_nuevo, motivo, detalles)
+      VALUES (?, ?, 'MANTENIMIENTO', ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, new Date().toISOString(), req.user.nombre || req.user.username,
+      activo.unidad, activo.unidad, activo.custodio, activo.custodio,
+      `Mantención ${tipo_mantenimiento.toLowerCase()}: ${descripcion.trim()}`, detalles
+    );
+  })();
+
+  return res.status(201).json({
+    success: true,
+    message: 'Mantención registrada en la bitácora.',
+    data: {
+      id_activo: id,
+      tipo_mantenimiento,
+      ultimo_mantenimiento: ultimo ? fechaMant : activo.ultimo_mantenimiento,
+      estado_operativo: nuevoEstado
+    }
+  });
 });
 
 module.exports = router;

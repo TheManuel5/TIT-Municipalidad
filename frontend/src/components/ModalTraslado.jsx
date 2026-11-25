@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { ArrowRightLeft, AlertCircle } from 'lucide-react';
-import { CATALOGOS } from '../api.mock.js';
+import { CATALOGOS } from '../catalogos.js';
+import { FieldError } from './FieldError';
 
 export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
   const [nuevaUnidad, setNuevaUnidad] = useState('');
@@ -10,6 +11,7 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
   const [motivo, setMotivo] = useState('');
   const [detalles, setDetalles] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -20,20 +22,32 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
       setMotivo('');
       setDetalles('');
       setError('');
+      setFieldErrors({});
     }
   }, [activo, isOpen]);
+
+  const clearFieldError = (name) => {
+    setFieldErrors((previous) => ({ ...previous, [name]: '' }));
+  };
+  const fieldError = (name) => (
+    <FieldError id={`traslado-${name}-error`} message={fieldErrors[name]} />
+  );
+  const fieldA11y = (name) => ({
+    'aria-invalid': Boolean(fieldErrors[name]),
+    ...(fieldErrors[name] ? { 'aria-describedby': `traslado-${name}-error` } : {})
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
-    if (!nuevaUnidad || !nuevaUbicacion || !nuevoCustodio) {
-      setError('Por favor complete todos los datos de asignación.');
-      return;
-    }
-
-    if (!motivo.trim()) {
-      setError('El motivo del traslado es obligatorio para la bitácora de auditoría.');
+    const errores = {};
+    if (!nuevaUnidad.trim()) errores.nueva_unidad = 'Selecciona la nueva unidad.';
+    if (!nuevaUbicacion.trim()) errores.nueva_ubicacion = 'Escribe la nueva ubicación.';
+    if (!nuevoCustodio.trim()) errores.nuevo_custodio = 'Escribe el nombre del nuevo custodio.';
+    if (!motivo.trim()) errores.motivo = 'Escribe el motivo del traslado.';
+    setFieldErrors(errores);
+    if (Object.keys(errores).length > 0) {
+      setError('Corrige los campos marcados antes de continuar.');
       return;
     }
 
@@ -41,9 +55,9 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
     try {
       await onConfirm({
         nueva_unidad: nuevaUnidad,
-        nueva_ubicacion: nuevaUbicacion,
-        nuevoCustodio: nuevoCustodio,
-        nuevo_custodio: nuevoCustodio,
+        nueva_ubicacion: nuevaUbicacion.trim(),
+        nuevoCustodio: nuevoCustodio.trim(),
+        nuevo_custodio: nuevoCustodio.trim(),
         motivo: motivo.trim(),
         detalles: detalles.trim()
       });
@@ -63,7 +77,7 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
       onClose={onClose} 
       title={`Traslado de Activo: ${activo.id_activo}`}
     >
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className="modal-body">
           <div className="alert alert-info" style={{ marginBottom: 16 }}>
             <div>
@@ -84,14 +98,18 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
             <select
               className="form-select"
               value={nuevaUnidad}
-              onChange={(e) => setNuevaUnidad(e.target.value)}
-              required
+              {...fieldA11y('nueva_unidad')}
+              onChange={(e) => {
+                setNuevaUnidad(e.target.value);
+                clearFieldError('nueva_unidad');
+              }}
             >
               <option value="">Seleccione una unidad municipal...</option>
               {CATALOGOS.unidades.map((u) => (
                 <option key={u} value={u}>{u}</option>
               ))}
             </select>
+            {fieldError('nueva_unidad')}
           </div>
 
           <div className="form-group">
@@ -100,10 +118,15 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
               type="text"
               className="form-input"
               value={nuevaUbicacion}
-              onChange={(e) => setNuevaUbicacion(e.target.value)}
+              {...fieldA11y('nueva_ubicacion')}
+              onChange={(e) => {
+                setNuevaUbicacion(e.target.value);
+                clearFieldError('nueva_ubicacion');
+              }}
               placeholder="Ej: DIDECO - Equipo Territorial Quilacahuín"
-              required
+              maxLength={200}
             />
+            {fieldError('nueva_ubicacion')}
           </div>
 
           <div className="form-group">
@@ -112,10 +135,15 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
               type="text"
               className="form-input"
               value={nuevoCustodio}
-              onChange={(e) => setNuevoCustodio(e.target.value)}
+              {...fieldA11y('nuevo_custodio')}
+              onChange={(e) => {
+                setNuevoCustodio(e.target.value);
+                clearFieldError('nuevo_custodio');
+              }}
               placeholder="Ej: Marcela Huenchumán Soto"
-              required
+              maxLength={200}
             />
+            {fieldError('nuevo_custodio')}
           </div>
 
           <div className="form-group">
@@ -124,10 +152,15 @@ export function ModalTraslado({ isOpen, onClose, activo, onConfirm }) {
               className="form-textarea"
               rows={3}
               value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
+              {...fieldA11y('motivo')}
+              onChange={(e) => {
+                setMotivo(e.target.value);
+                clearFieldError('motivo');
+              }}
               placeholder="Justificación formal de la reasignación (requerida por auditoría Ley 21.459)..."
-              required
+              maxLength={1000}
             />
+            {fieldError('motivo')}
           </div>
 
           <div className="form-group" style={{ marginBottom: 0 }}>

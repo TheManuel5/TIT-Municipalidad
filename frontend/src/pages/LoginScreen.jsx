@@ -1,11 +1,36 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, KeyRound, Building, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Building, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { FieldError } from '../components/FieldError';
+
+const USERNAME_STORAGE_KEY = 'san_pablo_remembered_username';
+
+function readRememberedLogin() {
+  try {
+    return { username: localStorage.getItem(USERNAME_STORAGE_KEY) || '', error: '' };
+  } catch {
+    return {
+      username: '',
+      error: 'El navegador no permite guardar el usuario en este dispositivo.'
+    };
+  }
+}
+
+const cuentasIniciales = [
+  { username: 'admin', nombre: 'Administrador TI', unidad: 'Informática' },
+  { username: 'jefe_dideco', nombre: 'Jefatura', unidad: 'DIDECO' },
+  { username: 'auditor', nombre: 'Auditoría / Control', unidad: 'Control' }
+];
 
 export function LoginScreen() {
-  const { login, loading, testUsers } = useAuth();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('password123');
+  const { login, loading } = useAuth();
+  const [rememberedLogin] = useState(readRememberedLogin);
+  const [username, setUsername] = useState(rememberedLogin.username);
+  const [password, setPassword] = useState('');
+  const [rememberUsername, setRememberUsername] = useState(() => Boolean(rememberedLogin.username));
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [rememberError, setRememberError] = useState(rememberedLogin.error);
   const [error, setError] = useState(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('expired=1')) {
       window.history.replaceState({}, '', window.location.pathname.replace(/\/login$/, '') || '/');
@@ -17,19 +42,33 @@ export function LoginScreen() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    try {
-      await login(username, password);
-    } catch (err) {
-      setError(err.message || 'Error al iniciar sesión.');
-    }
-  };
+    const errors = {};
+    if (!username.trim()) errors.username = 'Escribe tu usuario institucional.';
+    if (!password) errors.password = 'Escribe tu contraseña.';
+    setFieldErrors(errors);
 
-  const handleQuickLogin = (testUser) => {
-    setUsername(testUser.username);
-    setPassword('password123');
-    login(testUser.username, 'password123').catch((err) => {
-      setError(err.message);
-    });
+    if (Object.keys(errors).length > 0) {
+      setError('Revisa los campos marcados.');
+      return;
+    }
+
+    try {
+      await login(username.trim(), password);
+      // Guardar usuario en localStorage al iniciar sesión exitosamente
+      if (rememberUsername && username.trim()) {
+        try {
+          localStorage.setItem(USERNAME_STORAGE_KEY, username.trim());
+        } catch {
+          // Si no se puede guardar, no bloquear el login
+        }
+      }
+    } catch (err) {
+      if (err.status === 401) {
+        setFieldErrors({ password: 'El usuario o la contraseña no son correctos.' });
+      } else {
+        setError(err.message || 'Error al iniciar sesión.');
+      }
+    }
   };
 
   return (
@@ -94,30 +133,89 @@ export function LoginScreen() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="form-group">
             <label className="form-label">Usuario Institucional</label>
             <input
               type="text"
               className="form-input"
+              name="username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Ej: admin, jefe_dideco, auditor"
-              required
+              onChange={(e) => {
+                const nextUsername = e.target.value;
+                setUsername(nextUsername);
+                setFieldErrors((previous) => ({ ...previous, username: '' }));
+                if (rememberUsername) {
+                  try {
+                    if (nextUsername.trim()) localStorage.setItem(USERNAME_STORAGE_KEY, nextUsername.trim());
+                    else localStorage.removeItem(USERNAME_STORAGE_KEY);
+                    setRememberError('');
+                  } catch {
+                    setRememberError('No se pudo guardar el usuario; puedes seguir iniciando sesión.');
+                  }
+                }
+              }}
+              placeholder="Escribe tu usuario institucional"
+              autoComplete="username"
+              aria-invalid={Boolean(fieldErrors.username)}
+              aria-describedby={fieldErrors.username ? 'login-username-error' : undefined}
+              maxLength={100}
             />
+            <FieldError id="login-username-error" message={fieldErrors.username} />
           </div>
 
           <div className="form-group">
             <label className="form-label">Contraseña</label>
-            <input
-              type="password"
-              className="form-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
-              required
-            />
+            <div className="password-input-wrap">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="form-input"
+                name="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setFieldErrors((previous) => ({ ...previous, password: '' }));
+                }}
+                placeholder="Escribe tu contraseña"
+                autoComplete="current-password"
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
+                maxLength={200}
+              />
+              <button
+                type="button"
+                className="password-visibility-button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-pressed={showPassword}
+                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <FieldError id="login-password-error" message={fieldErrors.password} />
           </div>
+
+          <label className="remember-option">
+            <input
+              type="checkbox"
+              checked={rememberUsername}
+              aria-describedby={rememberError ? 'remember-username-error' : undefined}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setRememberUsername(checked);
+                try {
+                  if (checked && username.trim()) localStorage.setItem(USERNAME_STORAGE_KEY, username.trim());
+                  else if (!checked) localStorage.removeItem(USERNAME_STORAGE_KEY);
+                  setRememberError('');
+                } catch {
+                  setRememberError('No se pudo guardar el usuario; puedes seguir iniciando sesión.');
+                }
+              }}
+            />
+            <span>Recordar usuario en este dispositivo.</span>
+          </label>
+          <FieldError id="remember-username-error" message={rememberError} />
 
           <button
             type="submit"
@@ -130,65 +228,43 @@ export function LoginScreen() {
           </button>
         </form>
 
-        {/* Acceso Rápido para Demostración */}
-        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-            Acceso Rápido para Pruebas (3 Roles):
+        <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', marginBottom: 8 }}>
+            Usuarios iniciales del sistema
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {testUsers.map((u) => {
-              const isAdmin = u.rol === 'admin_ti';
-              const isJefe = u.rol === 'jefatura';
-              return (
-                <button
-                  key={u.username}
-                  type="button"
-                  onClick={() => handleQuickLogin(u)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#2563eb';
-                    e.currentTarget.style.background = '#eff6ff';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#cbd5e1';
-                    e.currentTarget.style.background = '#f8fafc';
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '0.825rem', fontWeight: 600, color: '#0f172a' }}>
-                      {u.nombre}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                      {isAdmin ? '⚙️ Admin TI (Acceso total + IP/Red)' : (isJefe ? `🏢 Jefatura ${u.unidad}` : '👁️ Auditoria Control')}
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '0.7rem',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: isAdmin ? '#f3e8ff' : (isJefe ? '#e0f2fe' : '#f1f5f9'),
-                    color: isAdmin ? '#7e22ce' : (isJefe ? '#0369a1' : '#475569'),
-                    fontWeight: 700
-                  }}>
-                    {u.rol}
-                  </span>
-                </button>
-              );
-            })}
+          <p style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 10 }}>
+            Selecciona tu usuario y escribe la contraseña de tu cuenta. El servidor comprueba el acceso.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {cuentasIniciales.map((cuenta) => (
+              <button
+                key={cuenta.username}
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ justifyContent: 'space-between' }}
+                disabled={loading}
+                onClick={() => {
+                  setUsername(cuenta.username);
+                  setPassword('');
+                  setError('');
+                  setFieldErrors({});
+                  if (rememberUsername) {
+                    try {
+                      localStorage.setItem(USERNAME_STORAGE_KEY, cuenta.username);
+                      setRememberError('');
+                    } catch {
+                      setRememberError('No se pudo guardar el usuario; puedes seguir iniciando sesión.');
+                    }
+                  }
+                }}
+              >
+                <span>{cuenta.nombre} · {cuenta.unidad}</span>
+                <span style={{ fontFamily: 'monospace' }}>{cuenta.username}</span>
+              </button>
+            ))}
           </div>
         </div>
+
       </div>
     </div>
   );

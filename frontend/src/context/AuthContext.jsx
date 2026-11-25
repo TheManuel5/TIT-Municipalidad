@@ -1,23 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../api.js';
-import { USUARIOS_PRUEBA } from '../api.mock.js';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const isMock = import.meta.env.VITE_USE_MOCK !== 'false';
-
   const [user, setUser] = useState(() => {
     try {
       const stored = localStorage.getItem('san_pablo_auth_user_v1');
       const token = localStorage.getItem('san_pablo_jwt_token');
-
-      // En Modo Simulado (Mock): default al primer usuario de prueba para agilidad
-      if (isMock) {
-        return stored ? JSON.parse(stored) : USUARIOS_PRUEBA[0];
-      }
-
-      // En Modo Real (Backend Express): Solo estamos autenticados si existe un JWT válido guardado
       if (token && stored) {
         return JSON.parse(stored);
       }
@@ -55,35 +45,6 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  // Selector rápido de rol para pruebas
-  const switchUser = async (username) => {
-    setLoading(true);
-    try {
-      if (!isMock) {
-        // En modo real: obtener JWT real del backend para el nuevo rol
-        const res = await api.login(username, 'password123');
-        setUser(res.data.user);
-      } else {
-        const found = USUARIOS_PRUEBA.find((u) => u.username === username);
-        if (found) {
-          const userData = {
-            id: found.id,
-            username: found.username,
-            nombre: found.nombre,
-            rol: found.rol,
-            unidad: found.unidad
-          };
-          localStorage.setItem('san_pablo_auth_user_v1', JSON.stringify(userData));
-          setUser(userData);
-        }
-      }
-    } catch (err) {
-      console.error('Error al cambiar de usuario:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -91,9 +52,7 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!user,
         loading,
         login,
-        logout,
-        switchUser,
-        testUsers: USUARIOS_PRUEBA
+        logout
       }}
     >
       {children}
