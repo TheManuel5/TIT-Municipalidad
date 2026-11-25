@@ -64,6 +64,53 @@ describe('Permisos de escritura', () => {
 });
 
 describe('Alta (Endpoint 7)', () => {
+  // Regresión: el formulario envía "" en los campos opcionales que el usuario deja vacíos.
+  // Antes el servidor rechazaba ultimo_mantenimiento = "" como fecha inválida y NINGÚN alta
+  // desde la interfaz funcionaba.
+  const PAYLOAD_FORMULARIO = {
+    id_activo: 'SP-HW-0400',
+    categoria: 'PC',
+    marca_modelo: 'HP ProDesk 400 G9',
+    descripcion: '',
+    ubicacion: 'DAF - Oficina 2',
+    unidad: 'DAF',
+    custodio: 'Carolina Muñoz Vera',
+    estado_operativo: 'Bueno',
+    ultimo_mantenimiento: '',
+    tipo_mantenimiento: 'Preventiva',
+    criticidad: 'Media',
+    proceso_asociado: '',
+    fecha_adquisicion: '2026-11-01',
+    fecha_garantia: '2029-11-01',
+    licencias_asociadas: '',
+    proveedor: 'Tech Patagonia Ltda.',
+    contrato_oc: 'OC 4521-90-SE26',
+    costo_inicial: 720000,
+    costo_anual: 0,
+    configuracion_red: '',
+    responsable_revision: 'Felipe Oyarzún Mansilla',
+    recepcion_verificada: true
+  };
+
+  test('acepta el alta tal como la envía el formulario (campos opcionales vacíos y costo anual 0)', async () => {
+    const r = await post('/activos', admin, PAYLOAD_FORMULARIO);
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const a = db.prepare("SELECT ultimo_mantenimiento, configuracion_red, costo_anual FROM activos WHERE id_activo = 'SP-HW-0400'").get();
+    assert.equal(a.ultimo_mantenimiento, null);
+    assert.equal(a.configuracion_red, null);
+    assert.equal(a.costo_anual, 0);
+  });
+
+  test('la edición con campos opcionales vacíos también funciona', async () => {
+    const r = await put('/activos/SP-HW-0400', admin, { ultimo_mantenimiento: '', descripcion: '', estado_operativo: 'Regular' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+  });
+
+  test('una fecha de mantención con formato inválido sigue siendo rechazada', async () => {
+    const r = await post('/activos', admin, { ...PAYLOAD_FORMULARIO, id_activo: 'SP-HW-0401', ultimo_mantenimiento: '24/11/2026' });
+    assert.equal(r.status, 400);
+  });
+
   test('crea el activo y registra ALTA en la bitácora', async () => {
     const r = await post('/activos', admin, NUEVO);
     assert.equal(r.status, 201);

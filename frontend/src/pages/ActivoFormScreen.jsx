@@ -179,13 +179,14 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
 
   const handleCostChange = (e) => {
     const { name, value } = e.target;
-    if (value === '' || (Number.isFinite(Number(value)) && Number(value) > 0)) {
+    // 0 es válido (equipo sin costo recurrente o software gratuito); solo se rechazan negativos
+    if (value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0)) {
       handleChange(e);
       return;
     }
 
     setFormData((previous) => ({ ...previous, [name]: '' }));
-    setFieldErrors((previous) => ({ ...previous, [name]: 'El costo debe ser mayor que 0.' }));
+    setFieldErrors((previous) => ({ ...previous, [name]: 'El costo no puede ser negativo (escribe 0 si no aplica).' }));
     setError('Corrige los campos marcados antes de guardar.');
   };
 
@@ -562,7 +563,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 value={formData.costo_inicial}
                 onChange={handleCostChange}
                 placeholder="650000"
-                min="1"
+                min="0"
                 step="1"
                 required
               />
@@ -579,7 +580,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 value={formData.costo_anual}
                 onChange={handleCostChange}
                 placeholder="10000"
-                min="1"
+                min="0"
                 step="1"
                 required
               />
