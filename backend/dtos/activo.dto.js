@@ -100,7 +100,8 @@ function parseActivoDto(input, { create = false } = {}) {
     // Un campo opcional enviado vacío ("") significa "sin dato": se guarda como NULL.
     // El formulario envía "" en ultimo_mantenimiento al dar de alta un equipo que aún no tiene
     // mantenciones; antes se validaba como fecha y el alta fallaba siempre.
-    if (data[field] === '' && CAMPOS_TEXTO_NULABLES.has(field)) {
+    // Excepción: si el campo es obligatorio en el alta (ej. proveedor), vacío sigue siendo error.
+    if (data[field] === '' && CAMPOS_TEXTO_NULABLES.has(field) && !(create && CAMPOS_REQUERIDOS_ALTA.includes(field))) {
       data[field] = null;
       continue;
     }

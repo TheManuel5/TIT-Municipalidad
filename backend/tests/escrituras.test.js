@@ -106,6 +106,12 @@ describe('Alta (Endpoint 7)', () => {
     assert.equal(r.status, 200, JSON.stringify(r.body));
   });
 
+  test('los campos obligatorios del alta no se pueden enviar vacíos (proveedor)', async () => {
+    const r = await post('/activos', admin, { ...PAYLOAD_FORMULARIO, id_activo: 'SP-HW-0402', proveedor: '' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.details.some((d) => d.campo === 'proveedor'), JSON.stringify(r.body));
+  });
+
   test('una fecha de mantención con formato inválido sigue siendo rechazada', async () => {
     const r = await post('/activos', admin, { ...PAYLOAD_FORMULARIO, id_activo: 'SP-HW-0401', ultimo_mantenimiento: '24/11/2026' });
     assert.equal(r.status, 400);
