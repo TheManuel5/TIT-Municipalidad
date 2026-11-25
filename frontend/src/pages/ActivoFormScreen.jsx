@@ -5,6 +5,23 @@ import { ArrowLeft, Save, AlertCircle, ShieldAlert, CheckCircle2 } from 'lucide-
 import { CATALOGOS } from '../catalogos.js';
 import { FieldError } from '../components/FieldError';
 
+const ETIQUETAS_CAMPOS = {
+  id_activo: 'ID único',
+  categoria: 'Categoría',
+  marca_modelo: 'Marca y modelo',
+  ubicacion: 'Ubicación',
+  unidad: 'Unidad municipal',
+  custodio: 'Custodio',
+  estado_operativo: 'Estado operativo',
+  proveedor: 'Proveedor',
+  contrato_oc: 'Orden de compra / contrato',
+  fecha_adquisicion: 'Fecha de adquisición',
+  fecha_garantia: 'Vencimiento de garantía',
+  costo_inicial: 'Costo inicial',
+  costo_anual: 'Costo anual',
+  recepcion_verificada: 'Verificación de recepción'
+};
+
 function fechaISOValida(valor) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
   const fecha = new Date(`${valor}T00:00:00.000Z`);
@@ -183,6 +200,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
     const errores = validarFormularioActivo(formData, { isEdit, initialData, recepcionVerificada });
     setFieldErrors(errores);
     if (Object.keys(errores).length > 0) {
@@ -221,7 +239,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     } catch (err) {
       const erroresServidor = Object.fromEntries(
         (Array.isArray(err.details) ? err.details : [])
-          .filter((detalle) => detalle.campo && detalle.mensaje)
+          .filter((detalle) => typeof detalle?.campo === 'string' && typeof detalle?.mensaje === 'string')
           .map((detalle) => [detalle.campo, detalle.mensaje])
       );
       if (err.status === 409) erroresServidor.id_activo = err.message;
@@ -254,7 +272,20 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
       {error && (
         <div className="alert alert-danger" style={{ marginBottom: 20 }}>
           <AlertCircle size={18} style={{ flexShrink: 0 }} />
-          <span>{error}</span>
+          <div>
+            <span>{error}</span>
+            {Object.entries(fieldErrors).some(([, mensaje]) => mensaje) && (
+              <ul style={{ margin: '6px 0 0', paddingLeft: 20 }}>
+                {Object.entries(fieldErrors)
+                  .filter(([, mensaje]) => mensaje)
+                  .map(([campo, mensaje]) => (
+                    <li key={campo}>
+                      {ETIQUETAS_CAMPOS[campo] || campo}: {mensaje}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 

@@ -71,13 +71,49 @@ describe('Alta (Endpoint 7)', () => {
     assert.deepEqual(eventos('SP-HW-0200'), ['ALTA']);
   });
 
+  test('acepta ultimo_mantenimiento vacío como campo opcional', async () => {
+    const r = await post('/activos', admin, {
+      ...NUEVO,
+      id_activo: 'SP-HW-0203',
+      ultimo_mantenimiento: ''
+    });
+    assert.equal(r.status, 201);
+    assert.equal(
+      db.prepare("SELECT ultimo_mantenimiento FROM activos WHERE id_activo = 'SP-HW-0203'").get().ultimo_mantenimiento,
+      null
+    );
+  });
+
   test('id duplicado -> 409', async () => {
     assert.equal((await post('/activos', admin, NUEVO)).status, 409);
   });
 
   test('exige confirmar la recepción y la orden de compra', async () => {
-    assert.equal((await post('/activos', admin, { ...NUEVO, id_activo: 'SP-HW-0201', recepcion_verificada: false })).status, 400);
-    assert.equal((await post('/activos', admin, { ...NUEVO, id_activo: 'SP-HW-0202', contrato_oc: '' })).status, 400);
+    const recepcion = await post('/activos', admin, { ...NUEVO, id_activo: 'SP-HW-0201', recepcion_verificada: false });
+    assert.equal(recepcion.status, 400);
+    assert.ok(recepcion.body.error.details.some((detalle) => detalle.campo === 'recepcion_verificada'));
+
+    const contrato = await post('/activos', admin, { ...NUEVO, id_activo: 'SP-HW-0202', contrato_oc: '' });
+    assert.equal(contrato.status, 400);
+    assert.ok(contrato.body.error.details.some((detalle) => detalle.campo === 'contrato_oc'));
+  });
+
+  test('exige proveedor y fechas en la respuesta marcada por campo', async () => {
+    for (const campo of ['proveedor', 'fecha_adquisicion', 'fecha_garantia']) {
+      const payload = { ...NUEVO, id_activo: `SP-HW-02${campo.length}` };
+      delete payload[campo];
+      const r = await post('/activos', admin, payload);
+      assert.equal(r.status, 400);
+      assert.ok(r.body.error.details.some((detalle) => detalle.campo === campo));
+    }
+
+    const proveedorNulo = await post('/activos', admin, {
+      ...NUEVO,
+      id_activo: 'SP-HW-0215',
+      proveedor: null
+    });
+    assert.equal(proveedorNulo.status, 400);
+    assert.ok(proveedorNulo.body.error.details.some((detalle) => detalle.campo === 'proveedor'));
   });
 
   test('exige costos inicial y anual mayores que cero', async () => {

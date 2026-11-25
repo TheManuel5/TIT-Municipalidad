@@ -67,7 +67,10 @@ router.post('/', soloAdminTI, (req, res) => {
       error: {
         code: 'BAD_REQUEST',
         message: 'Confirme la verificación física y documental de la recepción antes de registrar el activo.',
-        details: []
+        details: [{
+          campo: 'recepcion_verificada',
+          mensaje: 'Confirma que verificaste físicamente el bien y sus documentos.'
+        }]
       }
     });
   }
@@ -78,7 +81,10 @@ router.post('/', soloAdminTI, (req, res) => {
       error: {
         code: 'BAD_REQUEST',
         message: `La unidad '${unidad}' no está registrada en el catálogo municipal.`,
-        details: []
+        details: [{
+          campo: 'unidad',
+          mensaje: `La unidad '${unidad}' no está registrada en el catálogo municipal.`
+        }]
       }
     });
   }
@@ -89,7 +95,10 @@ router.post('/', soloAdminTI, (req, res) => {
       error: {
         code: 'BAD_REQUEST',
         message: 'Use el procedimiento de baja para registrar activos dados de baja.',
-        details: []
+        details: [{
+          campo: 'estado_operativo',
+          mensaje: 'Use el procedimiento de baja para registrar activos dados de baja.'
+        }]
       }
     });
   }

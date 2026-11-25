@@ -33,7 +33,10 @@ const CAMPOS_REQUERIDOS_ALTA = [
   'ubicacion',
   'unidad',
   'custodio',
-  'contrato_oc'
+  'proveedor',
+  'contrato_oc',
+  'fecha_adquisicion',
+  'fecha_garantia'
 ];
 
 const CAMPOS_TEXTO_NULABLES = new Set([
@@ -80,9 +83,14 @@ function parseActivoDto(input, { create = false } = {}) {
   }
 
   for (const field of Object.keys(TEXTO_MAXIMO)) {
-    if (!(field in data)) continue;
+    if (!(field in data)) {
+      if (create && CAMPOS_REQUERIDOS_ALTA.includes(field)) {
+        errors.push({ campo: field, mensaje: 'Este campo es obligatorio.' });
+      }
+      continue;
+    }
     const value = data[field];
-    if (value === null && CAMPOS_TEXTO_NULABLES.has(field)) continue;
+    if (value === null && CAMPOS_TEXTO_NULABLES.has(field) && !(create && CAMPOS_REQUERIDOS_ALTA.includes(field))) continue;
     if (typeof value !== 'string') {
       errors.push({ campo: field, mensaje: 'Debe ser texto.' });
       continue;
@@ -115,6 +123,10 @@ function parseActivoDto(input, { create = false } = {}) {
 
   for (const field of CAMPOS_FECHA) {
     if (!(field in data) || data[field] === null) continue;
+    if (field === 'ultimo_mantenimiento' && data[field] === '') {
+      data[field] = null;
+      continue;
+    }
     if (typeof data[field] !== 'string' || !fechaValida(data[field])) {
       errors.push({ campo: field, mensaje: 'Use una fecha válida en formato AAAA-MM-DD.' });
     }
