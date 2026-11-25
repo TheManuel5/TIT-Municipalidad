@@ -89,7 +89,7 @@ function fechaISOValida(valor) {
 
 function costoValido(valor) {
   const costo = Number(valor);
-  return valor.trim() !== '' && Number.isFinite(costo) && costo > 0;
+  return valor.trim() !== '' && Number.isFinite(costo) && costo >= 0;
 }
 
 export function ImportarScreen({ onActivosImportados }) {
@@ -259,7 +259,7 @@ export function ImportarScreen({ onActivosImportados }) {
       }
       for (const campo of ['costo_inicial', 'costo_anual']) {
         if (!costoValido(filaObj[campo] || '')) {
-          errores.push(`${campo} debe ser un número mayor que 0.`);
+          errores.push(`${campo} debe ser un número mayor o igual a 0.`);
         }
       }
 
