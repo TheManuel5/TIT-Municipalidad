@@ -386,8 +386,8 @@ Todos los errores siguen el formato del contrato:
 | Rol | Qué activos ve | `criticidad` y `configuracion_red` |
 | :--- | :--- | :--- |
 | `admin_ti` | Todos | Valores reales |
-| `lectura` | Todos | `[RESERVADO]` / `[RESERVADO - Ley N.º 21.663]` |
-| `jefatura` | Solo su unidad (listado, ficha, historial y alertas) | `[RESERVADO]` / `[RESERVADO - Ley N.º 21.663]` |
+| `lectura` | Todos | `[RESERVADO]` |
+| `jefatura` | Solo su unidad (listado, ficha, historial y alertas) | `[RESERVADO]` |
 
 - El **filtro por unidad** de `jefatura` se aplica en las consultas SQL de `consultas.js` (y en el middleware
   `aplicarFiltroUnidad` de Iván); un parámetro `?unidad=` distinto se ignora.

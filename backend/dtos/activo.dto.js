@@ -99,12 +99,15 @@ function parseActivoDto(input, { create = false } = {}) {
   if (data.id_activo) data.id_activo = data.id_activo.toUpperCase();
 
   for (const field of CAMPOS_COSTO) {
-    if (!(field in data)) continue;
+    if (!(field in data)) {
+      if (create) errors.push({ campo: field, mensaje: 'Debe ingresar un monto mayor que 0.' });
+      continue;
+    }
     const value = typeof data[field] === 'string' && data[field].trim() !== ''
       ? Number(data[field])
       : data[field];
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1_000_000_000_000) {
-      errors.push({ campo: field, mensaje: 'Ingrese un monto numérico entre 0 y 1.000.000.000.000.' });
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 1_000_000_000_000) {
+      errors.push({ campo: field, mensaje: 'Ingrese un monto mayor que 0 y hasta 1.000.000.000.000.' });
     } else {
       data[field] = value;
     }

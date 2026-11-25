@@ -71,7 +71,7 @@ Esta tabla define el modelo canónico del activo tecnológico. Ivan y Alfredo de
 | `proveedor` | `TEXT NOT NULL` | Público (Ley 19.886)| Razón social de la empresa proveedora. | `"Proveedor TI Sur Ltda."` |
 | `contrato_oc` | `TEXT NOT NULL` | Público (Ley 19.886)| ID de licitación u Orden de Compra Mercado Público. | `"OC 4521-12-SE25"` |
 | `costo_inicial` | `REAL NOT NULL` | Público (Presupuesto) | Costo de adquisición inicial en pesos chilenos ($ CLP). | `650000` |
-| `costo_anual` | `REAL NOT NULL` | Público (Presupuesto) | Costo recurrente anual (soporte, suscripción o mantenimiento). | `0` |
+| `costo_anual` | `REAL NOT NULL` | Público (Presupuesto) | Costo recurrente anual (soporte, suscripción o mantenimiento); en altas y ediciones debe ser mayor que cero. | `12000` |
 | `configuracion_red` | `TEXT` | **Estrictamente Reservado** | Direccionamiento IP, segmento VLAN, versión OS/firmware. *(Oculto a `jefatura` y `lectura`)*. | `"192.168.20.42 / VLAN 20 / Win 11 Pro 22H2"` |
 | `fecha_revision` | `TEXT` | Interno | Fecha de última validación física/lógica (`YYYY-MM-DD`). | `"2026-11-10"` |
 | `responsable_revision` | `TEXT` | Interno | Funcionario de TI que verificó el registro. | `"Felipe Oyarzún Mansilla"` |
@@ -187,7 +187,7 @@ Si `req.user.rol !== 'admin_ti'`:
         "proveedor": "Proveedor TI Sur Ltda.",
         "contrato_oc": "OC 4521-12-SE25",
         "costo_inicial": 650000,
-        "costo_anual": 0,
+        "costo_anual": 12000,
         "configuracion_red": "192.168.20.42 / VLAN 20 / Win 11 Pro 22H2",
         "fecha_revision": "2026-11-10",
         "responsable_revision": "Felipe Oyarzún Mansilla",
@@ -371,6 +371,7 @@ Si `req.user.rol !== 'admin_ti'`:
   }
   ```
 - `contrato_oc` y `recepcion_verificada: true` son obligatorios. La bitácora guarda el usuario, el momento y el documento asociado a la recepción.
+- `costo_inicial` y `costo_anual` deben ser mayores que cero.
 - **Respuesta (201 Created):**
   ```json
   {

@@ -121,11 +121,23 @@ CREATE TABLE IF NOT EXISTS conciliacion_activos (
     FOREIGN KEY (id_activo) REFERENCES activos(id_activo) ON DELETE RESTRICT
 );
 
-CREATE TRIGGER IF NOT EXISTS trg_conciliacion_activo_no_rewrite
+DROP TRIGGER IF EXISTS trg_conciliacion_activo_no_rewrite;
+CREATE TRIGGER trg_conciliacion_activo_no_rewrite
 BEFORE UPDATE ON conciliacion_activos
-WHEN OLD.resultado <> 'Pendiente'
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM conciliaciones c
+    WHERE c.id = OLD.id_conciliacion
+      AND c.resultado = 'En curso'
+      AND EXISTS (
+          SELECT 1
+          FROM conciliacion_activos pendiente
+          WHERE pendiente.id_conciliacion = OLD.id_conciliacion
+            AND pendiente.resultado = 'Pendiente'
+      )
+)
 BEGIN
-    SELECT RAISE(ABORT, 'Una inspección física registrada no se puede modificar.');
+    SELECT RAISE(ABORT, 'Solo se pueden editar inspecciones si la conciliación sigue en curso y quedan activos pendientes.');
 END;
 
 -- Bitácora inmutable (Ley N.º 21.459 / Ley N.º 20.285): solo se permite INSERT.

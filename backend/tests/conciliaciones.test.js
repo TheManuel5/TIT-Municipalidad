@@ -158,6 +158,38 @@ describe('Conciliación física del inventario', () => {
     assert.equal(inspeccion.resultado, 'Discrepancia');
   });
 
+  test('permite corregir una inspección guardada mientras queden activos pendientes', async () => {
+    const creada = await iniciarConciliacion();
+    const sesion = creada.body.data;
+    const activo = sesion.activos[0];
+    const discrepancia = observacionCoincidente(activo.datos_registrados);
+    discrepancia.custodio_observado = 'Custodio incorrecto';
+    discrepancia.detalle = 'Se digitó un custodio equivocado.';
+
+    const primeraRevision = await api.request(
+      'PUT',
+      `/conciliaciones/${sesion.id}/activos/${encodeURIComponent(activo.id_activo)}`,
+      { token: admin, body: discrepancia }
+    );
+    assert.equal(primeraRevision.status, 200);
+    assert.equal(primeraRevision.body.data.inspeccionados, 1);
+    assert.equal(primeraRevision.body.data.discrepancias, 1);
+    assert.equal(primeraRevision.body.data.resultado, 'En curso');
+
+    const revisionCorregida = await api.request(
+      'PUT',
+      `/conciliaciones/${sesion.id}/activos/${encodeURIComponent(activo.id_activo)}`,
+      { token: admin, body: observacionCoincidente(activo.datos_registrados) }
+    );
+    assert.equal(revisionCorregida.status, 200);
+    const actualizado = revisionCorregida.body.data.activos.find((item) => item.id_activo === activo.id_activo);
+    assert.equal(actualizado.resultado, 'Coincide');
+    assert.equal(actualizado.detalle, null);
+    assert.equal(revisionCorregida.body.data.inspeccionados, 1);
+    assert.equal(revisionCorregida.body.data.discrepancias, 0);
+    assert.equal(revisionCorregida.body.data.resultado, 'En curso');
+  });
+
   test('acepta exactamente 5% de discrepancias', async () => {
     const vigentes = db.prepare(`
       SELECT COUNT(*) AS n FROM activos WHERE estado_operativo <> 'De baja'

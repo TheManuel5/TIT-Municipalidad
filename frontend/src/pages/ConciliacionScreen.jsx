@@ -37,10 +37,12 @@ export function ConciliacionScreen() {
   const [conciliaciones, setConciliaciones] = useState([]);
   const [seleccionada, setSeleccionada] = useState(null);
   const [borradores, setBorradores] = useState({});
+  const [ediciones, setEdiciones] = useState({});
   const [loading, setLoading] = useState(true);
   const [creando, setCreando] = useState(false);
   const [guardando, setGuardando] = useState(null);
   const [error, setError] = useState(null);
+  const [mensaje, setMensaje] = useState(null);
 
   const cargarConciliaciones = async () => {
     setLoading(true);
@@ -57,10 +59,12 @@ export function ConciliacionScreen() {
 
   const abrirConciliacion = async (id) => {
     setError(null);
+    setMensaje(null);
     try {
       const respuesta = await api.getConciliacion(id);
       setSeleccionada(respuesta.data);
       setBorradores({});
+      setEdiciones({});
     } catch (err) {
       setError(err.message || 'No se pudo abrir la conciliación.');
     }
@@ -77,6 +81,8 @@ export function ConciliacionScreen() {
       const respuesta = await api.crearConciliacion();
       setSeleccionada(respuesta.data);
       setBorradores({});
+      setEdiciones({});
+      setMensaje(null);
       await cargarConciliaciones();
     } catch (err) {
       setError(err.message || 'No se pudo iniciar la conciliación física.');
@@ -90,10 +96,45 @@ export function ConciliacionScreen() {
       ...actuales,
       [idActivo]: { ...actuales[idActivo], [campo]: valor }
     }));
+    setError(null);
+    setMensaje(null);
+  };
+
+  const iniciarEdicion = (activo) => {
+    const observado = activo.datos_observados || {};
+    const borrador = {
+      encontrado: String(Boolean(activo.encontrado)),
+      detalle: activo.detalle || ''
+    };
+    for (const { campo } of CAMPOS_FISICOS) {
+      borrador[`${campo}_observado`] = observado[campo] || '';
+    }
+    setBorradores((actuales) => ({ ...actuales, [activo.id_activo]: borrador }));
+    setEdiciones((actuales) => ({ ...actuales, [activo.id_activo]: true }));
+    setError(null);
+    setMensaje(null);
+  };
+
+  const cancelarEdicion = (idActivo) => {
+    setEdiciones((actuales) => {
+      const siguientes = { ...actuales };
+      delete siguientes[idActivo];
+      return siguientes;
+    });
+    setBorradores((actuales) => {
+      const siguientes = { ...actuales };
+      delete siguientes[idActivo];
+      return siguientes;
+    });
+    setError(null);
+    setMensaje(null);
   };
 
   const guardarInspeccion = async (activo) => {
+    setError(null);
+    setMensaje(null);
     const borrador = borradores[activo.id_activo] || {};
+    const esEdicion = Boolean(ediciones[activo.id_activo]);
     if (!['true', 'false'].includes(borrador.encontrado)) {
       setError(`Indica si ${activo.id_activo} fue encontrado físicamente.`);
       return;
@@ -129,10 +170,13 @@ export function ConciliacionScreen() {
     }
 
     setGuardando(activo.id_activo);
-    setError(null);
     try {
       const respuesta = await api.registrarInspeccion(seleccionada.id, activo.id_activo, datos);
       setSeleccionada(respuesta.data);
+      cancelarEdicion(activo.id_activo);
+      setMensaje(esEdicion
+        ? `Revisión de ${activo.id_activo} actualizada correctamente.`
+        : `Inspección de ${activo.id_activo} guardada correctamente.`);
       await cargarConciliaciones();
     } catch (err) {
       setError(err.message || 'No se pudo guardar la inspección.');
@@ -164,6 +208,9 @@ export function ConciliacionScreen() {
   const progreso = seleccionada?.tamano_muestra
     ? Math.round((seleccionada.inspeccionados / seleccionada.tamano_muestra) * 100)
     : 0;
+  const puedeEditarRevisiones = esAdmin
+    && seleccionada?.resultado === 'En curso'
+    && seleccionada.inspeccionados < seleccionada.tamano_muestra;
 
   return (
     <div className="page-wrapper">
@@ -190,8 +237,8 @@ export function ConciliacionScreen() {
       <div className="alert alert-info" style={{ marginBottom: 18 }}>
         <ClipboardCheck size={18} />
         <span>
-          La muestra excluye los bienes dados de baja. Se guarda una sola inspección por activo y la conciliación se cierra
-          automáticamente al completar todos los elementos. Una discrepancia en una muestra de 11 bienes supera el 5%.
+          La muestra excluye los bienes dados de baja. Puedes editar una revisión guardada mientras queden activos pendientes;
+          al completar la muestra, la conciliación se cierra y ya no permite cambios.
         </span>
       </div>
 
@@ -199,6 +246,12 @@ export function ConciliacionScreen() {
         <div className="alert alert-danger" style={{ marginBottom: 18 }}>
           <AlertCircle size={18} />
           <span>{error}</span>
+        </div>
+      )}
+      {mensaje && (
+        <div className="alert alert-success" style={{ marginBottom: 18 }}>
+          <CheckCircle2 size={18} />
+          <span>{mensaje}</span>
         </div>
       )}
 
@@ -291,6 +344,10 @@ export function ConciliacionScreen() {
                 {seleccionada.activos.map((activo) => {
                   const borrador = borradores[activo.id_activo] || {};
                   const pendiente = activo.resultado === 'Pendiente';
+                  const editandoActivo = Boolean(ediciones[activo.id_activo]);
+                  const mostrarFormulario = esAdmin
+                    && seleccionada.resultado === 'En curso'
+                    && (pendiente || (editandoActivo && puedeEditarRevisiones));
                   return (
                     <article key={activo.id_activo} className="card" style={{ margin: 0, borderLeft: `4px solid ${colorResultado(activo.resultado)}` }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
@@ -305,7 +362,7 @@ export function ConciliacionScreen() {
                         </span>
                       </div>
 
-                      {pendiente && esAdmin ? (
+                      {mostrarFormulario ? (
                         <>
                           <div className="form-group">
                             <label className="form-label">Resultado de inspección</label>
@@ -360,24 +417,51 @@ export function ConciliacionScreen() {
                             </div>
                           )}
 
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={() => guardarInspeccion(activo)}
-                            disabled={guardando === activo.id_activo}
-                          >
-                            {guardando === activo.id_activo ? 'Guardando...' : 'Guardar inspección'}
-                          </button>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {editandoActivo && (
+                              <button
+                                type="button"
+                                className="btn btn-outline btn-sm"
+                                onClick={() => cancelarEdicion(activo.id_activo)}
+                                disabled={guardando !== null}
+                              >
+                                Cancelar edición
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => guardarInspeccion(activo)}
+                              disabled={guardando !== null}
+                            >
+                              {guardando === activo.id_activo
+                                ? 'Guardando...'
+                                : editandoActivo ? 'Guardar cambios' : 'Guardar inspección'}
+                            </button>
+                          </div>
                         </>
                       ) : (
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          {activo.fecha_verificacion
-                            ? `Verificado por ${activo.usuario_verificacion} · ${fechaLegible(activo.fecha_verificacion)}${activo.detalle ? ` · ${activo.detalle}` : ''}`
-                            : 'Pendiente de inspección física.'}
-                          {activo.datos_observados && (
-                            <div style={{ marginTop: 6 }}>
-                              Observado: {activo.datos_observados.ubicacion} · {activo.datos_observados.unidad} · {activo.datos_observados.custodio} · {activo.datos_observados.estado_operativo}
-                            </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flex: '1 1 240px' }}>
+                            {activo.fecha_verificacion
+                              ? `Verificado por ${activo.usuario_verificacion} · ${fechaLegible(activo.fecha_verificacion)}${activo.detalle ? ` · ${activo.detalle}` : ''}`
+                              : 'Pendiente de inspección física.'}
+                            {activo.datos_observados && (
+                              <div style={{ marginTop: 6 }}>
+                                Observado: {activo.datos_observados.ubicacion} · {activo.datos_observados.unidad} · {activo.datos_observados.custodio} · {activo.datos_observados.estado_operativo}
+                              </div>
+                            )}
+                          </div>
+                          {!pendiente && puedeEditarRevisiones && !editandoActivo && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ marginLeft: 'auto', flexShrink: 0 }}
+                              onClick={() => iniciarEdicion(activo)}
+                              disabled={guardando !== null}
+                            >
+                              Editar revisión
+                            </button>
                           )}
                         </div>
                       )}

@@ -4,7 +4,7 @@ import { Wrench } from 'lucide-react';
 import { FieldError } from './FieldError';
 
 /**
- * ModalMantenimiento - Registro de mantención preventiva/correctiva (RF-2)
+ * ModalMantenimiento - Registro de mantención preventiva/correctiva
  * Llama a POST /api/activos/:id/mantenimiento y queda en la bitácora como MANTENIMIENTO.
  */
 const hoyLocal = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' });
@@ -49,8 +49,10 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
     } else if (fecha && fecha > hoyLocal()) {
       errores.fecha = 'La fecha no puede estar en el futuro.';
     }
-    if (costo !== '' && (!Number.isFinite(Number(costo)) || Number(costo) < 0)) {
-      errores.costo = 'Ingresa un costo igual o mayor que cero.';
+    if (costo !== '' && (!Number.isFinite(Number(costo)) || Number(costo) <= 0)) {
+      errores.costo = 'Ingresa un costo mayor que 0.';
+    } else if (fieldErrors.costo && costo === '') {
+      errores.costo = fieldErrors.costo;
     }
     setFieldErrors(errores);
     if (Object.keys(errores).length > 0) {
@@ -145,18 +147,26 @@ export function ModalMantenimiento({ isOpen, onClose, activo, onConfirm }) {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Costo (CLP)</label>
+              <label className="form-label">Costo (CLP, opcional; mayor que 0)</label>
               <input
                 type="number"
-                min="0"
+                min="1"
                 step="1"
                 className="form-input"
                 value={costo}
                 aria-invalid={Boolean(fieldErrors.costo)}
                 aria-describedby={fieldErrors.costo ? 'mantenimiento-costo-error' : undefined}
                 onChange={(e) => {
-                  setCosto(e.target.value);
-                  setFieldErrors((previous) => ({ ...previous, costo: '' }));
+                  const valor = e.target.value;
+                  if (valor === '' || (Number.isFinite(Number(valor)) && Number(valor) > 0)) {
+                    setCosto(valor);
+                    setFieldErrors((previous) => ({ ...previous, costo: '' }));
+                    setError('');
+                  } else {
+                    setCosto('');
+                    setFieldErrors((previous) => ({ ...previous, costo: 'El costo debe ser mayor que 0.' }));
+                    setError('Corrige los campos marcados antes de registrar.');
+                  }
                 }}
                 placeholder="Opcional"
               />

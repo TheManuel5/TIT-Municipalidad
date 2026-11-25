@@ -664,7 +664,10 @@ ${(alertas?.garantias_por_vencer || []).length > 0 ? `
                 <div 
                   key={g.id_activo} 
                   className={`alert-card-item ${g.dias_restantes <= 30 ? 'urgente' : 'advertencia'}`}
-                  style={{ cursor: 'pointer' }}
+                  style={{
+                    cursor: 'pointer',
+                    borderLeft: `4px solid ${g.dias_restantes <= 30 ? 'var(--danger)' : 'var(--warning)'}`
+                  }}
                   onClick={() => onSelectActivo(g.id_activo)}
                 >
                   <div>
@@ -678,8 +681,8 @@ ${(alertas?.garantias_por_vencer || []).length > 0 ? `
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📍 {g.unidad} • Custodio: {g.custodio}</div>
                   </div>
 
-                  <div style={{ textAlign: 'right' }}>
-                    <div className={`badge ${g.dias_restantes <= 30 ? 'badge-danger' : 'badge-warning'}`}>
+                  <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    <div className={`badge ${g.dias_restantes <= 30 ? 'badge-danger' : 'badge-warning'}`} style={{ whiteSpace: 'nowrap' }}>
                       {g.dias_restantes > 0 ? `${g.dias_restantes} días` : 'Expirada'}
                     </div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>
@@ -767,7 +770,7 @@ ${(alertas?.garantias_por_vencer || []).length > 0 ? `
                 <div className="okr-meter-fill" style={{ width: '100%', background: '#7c3aed' }} />
               </div>
               <div className="okr-footer">
-                <span>Ley N.º 21.663 • Ciberseguridad</span>
+                <span>Seguridad de la información</span>
                 <span style={{ color: '#7c3aed', fontWeight: 600 }}>✓ Conciliado</span>
               </div>
             </div>

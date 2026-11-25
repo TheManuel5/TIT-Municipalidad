@@ -46,7 +46,7 @@ const NUEVO = {
   proveedor: 'Tech Patagonia Ltda.',
   contrato_oc: 'OC 9999-11-SE26',
   costo_inicial: 750000,
-  costo_anual: 0,
+  costo_anual: 18000,
   recepcion_verificada: true
 };
 
@@ -79,6 +79,24 @@ describe('Alta (Endpoint 7)', () => {
     assert.equal((await post('/activos', admin, { ...NUEVO, id_activo: 'SP-HW-0201', recepcion_verificada: false })).status, 400);
     assert.equal((await post('/activos', admin, { ...NUEVO, id_activo: 'SP-HW-0202', contrato_oc: '' })).status, 400);
   });
+
+  test('exige costos inicial y anual mayores que cero', async () => {
+    let id = 210;
+    for (const campo of ['costo_inicial', 'costo_anual']) {
+      for (const valor of [0, -1]) {
+        const r = await post('/activos', admin, {
+          ...NUEVO,
+          id_activo: `SP-HW-${id++}`,
+          [campo]: valor
+        });
+        assert.equal(r.status, 400, `${campo}=${valor}`);
+      }
+    }
+
+    const sinCostoAnual = { ...NUEVO, id_activo: 'SP-HW-0214' };
+    delete sinCostoAnual.costo_anual;
+    assert.equal((await post('/activos', admin, sinCostoAnual)).status, 400);
+  });
 });
 
 describe('Edición (Endpoint 8)', () => {
@@ -91,6 +109,15 @@ describe('Edición (Endpoint 8)', () => {
 
   test('activo inexistente -> 404', async () => {
     assert.equal((await put('/activos/SP-XX-0000', admin, { estado_operativo: 'Regular' })).status, 404);
+  });
+
+  test('rechaza costos inicial o anual en cero o negativos', async () => {
+    for (const campo of ['costo_inicial', 'costo_anual']) {
+      for (const valor of [0, -1]) {
+        const r = await put('/activos/SP-HW-0200', admin, { [campo]: valor });
+        assert.equal(r.status, 400, `${campo}=${valor}`);
+      }
+    }
   });
 });
 
@@ -131,6 +158,7 @@ describe('Mantención (Endpoint 20, RF-2)', () => {
       { fecha: sumarDias(hoyLocal(), 1) },
       { fecha: '24/11/2026' },
       { estado_resultante: 'De baja' },
+      { costo: 0 },
       { costo: -10 }
     ]) {
       const r = await post('/activos/SP-HW-0200/mantenimiento', admin, { ...base, ...malo });

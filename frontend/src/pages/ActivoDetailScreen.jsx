@@ -395,7 +395,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
           </div>
         </div>
 
-        {/* Bloque 4: Datos Técnicos y Ciberseguridad (RESERVADOS Ley 21.663) */}
+        {/* Datos de seguridad y red */}
         <div className="card" style={{ 
           marginBottom: 0, 
           borderColor: isReservadoCriticidad ? '#e2e8f0' : '#bfdbfe',
@@ -404,7 +404,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
           <div className="card-header">
             <div className="card-title">
               <ShieldCheck size={18} style={{ color: isReservadoCriticidad ? 'var(--text-muted)' : 'var(--primary)' }} />
-              <span>Seguridad y Red (Ley 21.663)</span>
+              <span>Datos de seguridad y red</span>
             </div>
             <span className="badge badge-purple">
               {isReservadoCriticidad ? 'Restringido' : 'Admin TI'}
@@ -417,7 +417,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               </span>
               {isReservadoCriticidad ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem' }}>
-                  <Lock size={12} /> Campo Reservado (Solo Admin TI)
+                  <Lock size={12} /> Información reservada (solo Administrador TI)
                 </div>
               ) : (
                 <span className={`badge ${activo.criticidad === 'Alta' ? 'badge-danger' : 'badge-warning'}`}>
@@ -432,7 +432,7 @@ export function ActivoDetailScreen({ idActivo, onBack, onEdit }) {
               </span>
               {isReservadoRed ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem' }}>
-                  <Lock size={12} /> Estrictamente Reservado (Ley N.º 21.663)
+                  <Lock size={12} /> Información reservada (solo Administrador TI)
                 </div>
               ) : (
                 <div style={{ 

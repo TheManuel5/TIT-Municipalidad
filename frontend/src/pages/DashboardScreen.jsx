@@ -233,7 +233,7 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
             </div>
             <div className="okr-footer">
               <span>Roles: Admin TI, Jefatura, Lectura</span>
-              <span style={{ color: '#2563eb', fontWeight: 600 }}>✓ En Norma Ley 21.663</span>
+              <span style={{ color: '#2563eb', fontWeight: 600 }}>✓ Accesos protegidos</span>
             </div>
           </div>
 
@@ -300,21 +300,22 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
             <p style={{ fontSize: '0.8rem' }}>Todos los equipos o contratos seleccionados se encuentran vigentes.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 390px), 1fr))', gap: 12 }}>
             {alertasFiltradas.map((a) => {
               const esUrgente = a.dias_restantes <= 30;
               return (
                 <div 
                   key={a.id_activo}
                   className={`alert-card-item ${esUrgente ? 'urgente' : 'advertencia'}`}
+                  style={{ borderLeft: `4px solid ${esUrgente ? 'var(--danger)' : 'var(--warning)'}` }}
                 >
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem', color: '#1e40af' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem', color: '#1e40af', whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {a.id_activo}
                       </span>
                       <CategoryBadge categoria={a.categoria} />
-                      <span className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>{a.tipo}</span>
+                      <span className="badge badge-secondary" style={{ fontSize: '0.7rem', flexShrink: 0 }}>{a.tipo}</span>
                     </div>
 
                     <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -326,7 +327,7 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     <div style={{
                       display: 'inline-block',
                       padding: '4px 10px',
@@ -335,7 +336,8 @@ export function DashboardScreen({ onSelectActivo, onViewAllActivos }) {
                       fontWeight: 700,
                       background: esUrgente ? '#fee2e2' : '#fef3c7',
                       color: esUrgente ? '#b91c1c' : '#b45309',
-                      border: `1px solid ${esUrgente ? '#fca5a5' : '#fde68a'}`
+                      border: `1px solid ${esUrgente ? '#fca5a5' : '#fde68a'}`,
+                      whiteSpace: 'nowrap'
                     }}>
                       {a.dias_restantes > 0 ? `${a.dias_restantes} días` : '¡Vence Hoy!'}
                     </div>

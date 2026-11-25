@@ -9,8 +9,8 @@ import { FieldError } from '../components/FieldError';
  * SeguridadScreen - Seguridad y Accesos
  * Responsable: Alfredo
  *  - Mi cuenta: cambio de la propia contraseña (todos los roles).
- *  - Usuarios: alta, cambio de rol/unidad, revocación y restablecimiento de contraseña (admin_ti). RF-6
- *  - Auditoría: registro inmutable de accesos y operaciones (admin_ti y lectura). RNF-6
+ *  - Usuarios: alta, cambio de rol/unidad, revocación y restablecimiento de contraseña (admin_ti).
+ *  - Auditoría: registro inmutable de accesos y operaciones (admin_ti y lectura).
  */
 
 const ROLES = [
@@ -520,7 +520,7 @@ export function SeguridadScreen() {
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--secondary)' }}>Seguridad y Accesos</h1>
         <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>
-          Gestión de cuentas y privilegios (RF-6) y registro de auditoría inalterable (RNF-6, Ley N.º 21.663).
+          Administración de cuentas, permisos y auditoría de seguridad.
         </p>
       </div>
 

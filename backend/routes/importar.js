@@ -22,10 +22,10 @@ function fechaValida(valor) {
   return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
 }
 
-function numeroNoNegativo(valor) {
-  if (valor === undefined || valor === null || valor === '') return 0;
+function numeroPositivo(valor) {
+  if (valor === undefined || valor === null || valor === '') return null;
   const numero = Number(valor);
-  return Number.isFinite(numero) && numero >= 0 ? numero : null;
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 
 // Solo /importar: el alias '/' hacía que un POST /api a secas ejecutara una importación.
@@ -94,10 +94,10 @@ router.post('/importar', soloAdmin, (req, res) => {
       errores.push(`Tipo de mantenimiento '${tipoMantenimiento}' no permitido.`);
     }
 
-    const costoInicial = numeroNoNegativo(fila.costo_inicial);
-    const costoAnual = numeroNoNegativo(fila.costo_anual);
-    if (costoInicial === null) errores.push('costo_inicial debe ser un número no negativo.');
-    if (costoAnual === null) errores.push('costo_anual debe ser un número no negativo.');
+    const costoInicial = numeroPositivo(fila.costo_inicial);
+    const costoAnual = numeroPositivo(fila.costo_anual);
+    if (costoInicial === null) errores.push('costo_inicial debe ser un número mayor que 0.');
+    if (costoAnual === null) errores.push('costo_anual debe ser un número mayor que 0.');
 
     for (const campo of ['fecha_adquisicion', 'fecha_garantia', 'ultimo_mantenimiento']) {
       if (fila[campo] && !fechaValida(String(fila[campo]).trim())) {

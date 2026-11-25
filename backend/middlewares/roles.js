@@ -94,7 +94,7 @@ function sanitizarActivo(activo, rol) {
   // falsos a respuestas que no son activos (auditoría, usuarios, reportes, conciliaciones).
   const sanitizado = { ...activo };
   if ('criticidad' in sanitizado) sanitizado.criticidad = '[RESERVADO]';
-  if ('configuracion_red' in sanitizado) sanitizado.configuracion_red = '[RESERVADO - Ley N.º 21.663]';
+  if ('configuracion_red' in sanitizado) sanitizado.configuracion_red = '[RESERVADO]';
   return sanitizado;
 }
 

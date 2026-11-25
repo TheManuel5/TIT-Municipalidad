@@ -55,8 +55,8 @@ router.post('/', soloAdminTI, (req, res) => {
     licencias_asociadas,
     proveedor,
     contrato_oc,
-    costo_inicial = 0,
-    costo_anual = 0,
+    costo_inicial,
+    costo_anual,
     configuracion_red,
     motivo
   } = data;
@@ -155,8 +155,8 @@ router.post('/', soloAdminTI, (req, res) => {
         licencias_asociadas || null,
         proveedor || 'Sin proveedor asignado',
         contrato_oc || 'Sin OC registrada',
-        Number(costo_inicial) || 0,
-        Number(costo_anual) || 0,
+        Number(costo_inicial),
+        Number(costo_anual),
         configuracion_red || null,
         fechaHoy,
         req.user.nombre || req.user.username,
@@ -668,8 +668,8 @@ router.post('/:id/mantenimiento', soloAdminTI, (req, res) => {
   if (estado_resultante !== undefined && estado_resultante !== '' && !ESTADOS_RESULTANTES.includes(estado_resultante)) {
     errores.push({ campo: 'estado_resultante', mensaje: `Debe ser: ${ESTADOS_RESULTANTES.join(', ')}. Para dar de baja use el endpoint de baja.` });
   }
-  if (costo !== undefined && costo !== '' && (typeof costo !== 'number' || !Number.isFinite(costo) || costo < 0)) {
-    errores.push({ campo: 'costo', mensaje: 'Debe ser un número mayor o igual a 0.' });
+  if (costo !== undefined && costo !== '' && (typeof costo !== 'number' || !Number.isFinite(costo) || costo <= 0)) {
+    errores.push({ campo: 'costo', mensaje: 'Debe ser un número mayor que 0.' });
   }
 
   if (errores.length) {

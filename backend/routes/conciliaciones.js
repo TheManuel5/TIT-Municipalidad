@@ -176,10 +176,15 @@ router.put('/:id/activos/:id_activo', ...SOLO_ADMIN, (req, res) => {
       error: { code: 'NOT_FOUND', message: 'El activo no pertenece a la muestra de esta conciliación.', details: [] }
     });
   }
-  if (item.resultado !== 'Pendiente') {
+  const pendientes = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM conciliacion_activos
+    WHERE id_conciliacion = ? AND resultado = 'Pendiente'
+  `).get(id).total;
+  if (item.resultado !== 'Pendiente' && pendientes === 0) {
     return res.status(409).json({
       success: false,
-      error: { code: 'CONFLICT', message: 'La inspección de este activo ya fue registrada.', details: [] }
+      error: { code: 'CONFLICT', message: 'La muestra ya está completa; no se puede editar la revisión.', details: [] }
     });
   }
 
@@ -204,7 +209,7 @@ router.put('/:id/activos/:id_activo', ...SOLO_ADMIN, (req, res) => {
       UPDATE conciliacion_activos
       SET datos_observados = ?, encontrado = ?, resultado = ?, detalle = ?,
           fecha_verificacion = ?, usuario_verificacion = ?
-      WHERE id_conciliacion = ? AND id_activo = ? AND resultado = 'Pendiente'
+      WHERE id_conciliacion = ? AND id_activo = ?
     `).run(
       body.encontrado ? JSON.stringify(observado) : null,
       body.encontrado ? 1 : 0,

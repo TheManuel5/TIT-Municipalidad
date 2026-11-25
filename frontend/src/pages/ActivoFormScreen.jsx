@@ -24,7 +24,8 @@ function validarFormularioActivo(formData, { isEdit, initialData, recepcionVerif
     ['contrato_oc', 'Escribe la orden de compra o contrato.'],
     ['fecha_adquisicion', 'Selecciona la fecha de adquisición.'],
     ['fecha_garantia', 'Selecciona la fecha de vencimiento de garantía.'],
-    ['costo_inicial', 'Escribe el costo inicial.']
+    ['costo_inicial', 'Escribe el costo inicial.'],
+    ['costo_anual', 'Escribe el costo anual recurrente.']
   ];
 
   obligatorios.forEach(([campo, mensaje]) => {
@@ -71,12 +72,12 @@ function validarFormularioActivo(formData, { isEdit, initialData, recepcionVerif
   }
 
   const costoInicial = Number(formData.costo_inicial);
-  const costoAnual = formData.costo_anual === '' ? 0 : Number(formData.costo_anual);
-  if (!errores.costo_inicial && (!Number.isFinite(costoInicial) || costoInicial < 0 || costoInicial > 1_000_000_000_000)) {
-    errores.costo_inicial = 'Ingresa un monto entre 0 y 1.000.000.000.000.';
+  const costoAnual = Number(formData.costo_anual);
+  if (!errores.costo_inicial && (!Number.isFinite(costoInicial) || costoInicial <= 0 || costoInicial > 1_000_000_000_000)) {
+    errores.costo_inicial = 'Ingresa un monto mayor que 0 y hasta 1.000.000.000.000.';
   }
-  if (!Number.isFinite(costoAnual) || costoAnual < 0 || costoAnual > 1_000_000_000_000) {
-    errores.costo_anual = 'Ingresa un monto entre 0 y 1.000.000.000.000.';
+  if (!errores.costo_anual && (!Number.isFinite(costoAnual) || costoAnual <= 0 || costoAnual > 1_000_000_000_000)) {
+    errores.costo_anual = 'Ingresa un monto mayor que 0 y hasta 1.000.000.000.000.';
   }
 
   ['fecha_adquisicion', 'fecha_garantia'].forEach((campo) => {
@@ -125,7 +126,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     proveedor: '',
     contrato_oc: '',
     costo_inicial: '',
-    costo_anual: 0,
+    costo_anual: '',
     configuracion_red: '',
     responsable_revision: user?.nombre || 'TI'
   });
@@ -139,8 +140,8 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     if (initialData) {
       setFormData({
         ...initialData,
-        costo_inicial: initialData.costo_inicial || '',
-        costo_anual: initialData.costo_anual || 0,
+        costo_inicial: Number(initialData.costo_inicial) > 0 ? initialData.costo_inicial : '',
+        costo_anual: Number(initialData.costo_anual) > 0 ? initialData.costo_anual : '',
         ultimo_mantenimiento: initialData.ultimo_mantenimiento || '',
         configuracion_red: initialData.configuracion_red && !initialData.configuracion_red.startsWith('[RESERVADO') 
           ? initialData.configuracion_red 
@@ -157,6 +158,18 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     }));
     setFieldErrors((previous) => ({ ...previous, [name]: '' }));
     setError(null);
+  };
+
+  const handleCostChange = (e) => {
+    const { name, value } = e.target;
+    if (value === '' || (Number.isFinite(Number(value)) && Number(value) > 0)) {
+      handleChange(e);
+      return;
+    }
+
+    setFormData((previous) => ({ ...previous, [name]: '' }));
+    setFieldErrors((previous) => ({ ...previous, [name]: 'El costo debe ser mayor que 0.' }));
+    setError('Corrige los campos marcados antes de guardar.');
   };
 
   const fieldError = (name) => (
@@ -178,7 +191,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
     }
 
     const costoInicial = Number(formData.costo_inicial);
-    const costoAnual = formData.costo_anual === '' ? 0 : Number(formData.costo_anual);
+    const costoAnual = Number(formData.costo_anual);
 
     setLoading(true);
     try {
@@ -516,9 +529,9 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
                 name="costo_inicial"
                 {...fieldA11y('costo_inicial')}
                 value={formData.costo_inicial}
-                onChange={handleChange}
+                onChange={handleCostChange}
                 placeholder="650000"
-                min="0"
+                min="1"
                 step="1"
                 required
               />
@@ -526,17 +539,18 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
             </div>
 
             <div className="form-group">
-              <label className="form-label">Costo Anual Recurrente ($ CLP/año)</label>
+              <label className="form-label">Costo Anual Recurrente ($ CLP/año) *</label>
               <input
                 type="number"
                 className="form-input"
                 name="costo_anual"
                 {...fieldA11y('costo_anual')}
                 value={formData.costo_anual}
-                onChange={handleChange}
-                placeholder="0"
-                min="0"
+                onChange={handleCostChange}
+                placeholder="10000"
+                min="1"
                 step="1"
+                required
               />
               {fieldError('costo_anual')}
             </div>
@@ -563,7 +577,7 @@ export function ActivoFormScreen({ initialData, isEdit = false, onSaveSuccess, o
             <div className="card-header">
               <div className="card-title">
                 <ShieldAlert size={18} style={{ color: 'var(--primary)' }} />
-                <span>4. Parámetros Técnicos Reservados (Ley N.º 21.663)</span>
+                <span>Datos de seguridad y red</span>
               </div>
               <span className="badge badge-purple">Solo Administrador TI</span>
             </div>

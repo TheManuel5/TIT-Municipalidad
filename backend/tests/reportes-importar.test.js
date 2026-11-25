@@ -130,7 +130,8 @@ describe('Importación de activos', () => {
     estado_operativo: 'Bueno',
     fecha_adquisicion: '2026-01-01',
     fecha_garantia: '2028-01-01',
-    costo_inicial: 123000
+    costo_inicial: 123000,
+    costo_anual: 12000
   });
 
   test('admin importa una vez, detecta duplicados del lote y registra IMPORTACION', async () => {
@@ -162,6 +163,26 @@ describe('Importación de activos', () => {
     assert.equal(r.status, 400);
     assert.match(r.body.error.message, /verificación física y documental/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activos WHERE id_activo = 'SP-GAB-9012'").get().n, 0);
+  });
+
+  test('rechaza costos vacíos, iguales a cero o negativos en la importación', async () => {
+    const r = await api.request('POST', '/importar', {
+      token: admin,
+      body: {
+        recepcion_verificada: true,
+        filas: [
+          { ...fila('SP-GAB-COST-9014'), costo_inicial: 0 },
+          { ...fila('SP-GAB-COST-9015'), costo_anual: -1 },
+          { ...fila('SP-GAB-COST-9016'), costo_anual: '' }
+        ]
+      }
+    });
+
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.data.resumen, { total_procesadas: 3, validas: 0, con_error: 3 });
+    assert.match(r.body.data.filas_invalidas[0].error, /costo_inicial debe ser un número mayor que 0/);
+    assert.match(r.body.data.filas_invalidas[1].error, /costo_anual debe ser un número mayor que 0/);
+    assert.match(r.body.data.filas_invalidas[2].error, /costo_anual debe ser un número mayor que 0/);
   });
 
   test('admite importaciones mayores al límite JSON general', async () => {
@@ -226,6 +247,7 @@ test('el alta manual exige y registra la verificación de recepción', async () 
     fecha_garantia: '2028-01-01',
     contrato_oc: 'OC-RECEPCION-TEST',
     costo_inicial: 100000,
+    costo_anual: 12000,
     fecha_revision: '2000-01-01',
     responsable_revision: 'Usuario no autorizado',
     motivo_baja: 'Intento de asignación desde el cliente',
@@ -268,6 +290,7 @@ test('edición CRUD persiste en SQLite y descarta campos protegidos del DTO', as
       fecha_garantia: '2028-01-01',
       contrato_oc: 'OC-DTO-TEST',
       costo_inicial: 100000,
+      costo_anual: 12000,
       recepcion_verificada: true
     }
   });
