@@ -1,9 +1,9 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RoleBadge } from './Badge';
-import { LogOut, Menu } from 'lucide-react';
+import { LogOut, Menu, X } from 'lucide-react';
 
-export function Navbar({ onToggleSidebar, onLogout }) {
+export function Navbar({ isSidebarOpen, onToggleSidebar, onLogout }) {
   const { user, logout } = useAuth();
 
   const handleLogout = onLogout || logout;
@@ -13,11 +13,13 @@ export function Navbar({ onToggleSidebar, onLogout }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <button 
           type="button" 
-          className="btn btn-outline btn-sm mobile-menu-btn"
+          className="btn btn-outline btn-sm sidebar-toggle-btn"
           onClick={onToggleSidebar}
-          aria-label="Abrir menú de navegación"
+          aria-label={isSidebarOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+          aria-expanded={isSidebarOpen}
+          aria-controls="app-navigation"
         >
-          <Menu size={18} />
+          {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
         </button>
 
         <div className="top-header-title">

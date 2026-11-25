@@ -34,7 +34,7 @@ export function App() {
       setCurrentTab('dashboard');
       setSelectedActivoId(null);
       setEditingActivo(null);
-      setSidebarOpen(false);
+      setSidebarOpen(!window.matchMedia('(max-width: 1024px)').matches);
       showToast(`Sesión iniciada correctamente. Bienvenido/a, ${user?.nombre || user?.username || ''}.`);
     }
     wasAuthenticated.current = isAuthenticated;
@@ -50,7 +50,21 @@ export function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [selectedActivoId, setSelectedActivoId] = useState(null);
   const [editingActivo, setEditingActivo] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia('(max-width: 1024px)').matches
+  );
+
+  useEffect(() => {
+    const breakpoint = window.matchMedia('(max-width: 1024px)');
+    const syncSidebarWithViewport = (event) => setSidebarOpen(!event.matches);
+    breakpoint.addEventListener('change', syncSidebarWithViewport);
+    return () => breakpoint.removeEventListener('change', syncSidebarWithViewport);
+  }, []);
+
+  const handleSidebarClose = () => {
+    if (window.matchMedia('(max-width: 1024px)').matches) setSidebarOpen(false);
+  };
+
   const puedeAccederATab = (tab) => {
     if (tab === 'importar') return user?.rol === 'admin_ti';
     if (tab === 'conciliacion') return user?.rol === 'admin_ti' || user?.rol === 'lectura';
@@ -106,7 +120,7 @@ export function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       {/* Sidebar fijo a la izquierda */}
       <Sidebar
         currentTab={tabActiva}
@@ -117,7 +131,7 @@ export function App() {
           setEditingActivo(null);
         }}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={handleSidebarClose}
       />
       {sidebarOpen && (
         <button
@@ -141,7 +155,11 @@ export function App() {
 
       {/* Contenido principal a la derecha */}
       <div className="main-content">
-        <Navbar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} onLogout={handleLogout} />
+        <Navbar
+          isSidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((open) => !open)}
+          onLogout={handleLogout}
+        />
 
         <main style={{ flex: 1 }}>
           {tabActiva === 'dashboard' && (
