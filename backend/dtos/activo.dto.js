@@ -89,6 +89,13 @@ function parseActivoDto(input, { create = false } = {}) {
     }
 
     data[field] = value.trim();
+    // Un campo opcional enviado vacío ("") significa "sin dato": se guarda como NULL.
+    // El formulario envía "" en ultimo_mantenimiento al dar de alta un equipo que aún no tiene
+    // mantenciones; antes se validaba como fecha y el alta fallaba siempre.
+    if (data[field] === '' && CAMPOS_TEXTO_NULABLES.has(field)) {
+      data[field] = null;
+      continue;
+    }
     if (data[field].length > TEXTO_MAXIMO[field]) {
       errors.push({ campo: field, mensaje: `No puede superar ${TEXTO_MAXIMO[field]} caracteres.` });
     } else if (create && CAMPOS_REQUERIDOS_ALTA.includes(field) && !data[field]) {
